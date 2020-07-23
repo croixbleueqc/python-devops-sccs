@@ -85,6 +85,21 @@ class Core(object):
 
         #     return await self.plugin.create_repository(self.session, args, self._core.provision)
 
+    class ControlledContext:
+        """Create/Delete context in a with statement"""
+
+        def __init__(self, core, plugin_id, args):
+            self.core = core
+            self.plugin_id = plugin_id
+            self.args = args
+
+        async def __aenter__(self):
+            self.ctx = await self.core.create_context(self.plugin_id, self.args)
+            return self.ctx
+
+        async def __aexit__(self, exc_type, exc, tb):
+            await self.core.delete_context(self.ctx)
+
     def __init__(self, config={}):
         """Initialize plugins and internal modules"""
         self.plugins = {}
@@ -164,3 +179,7 @@ class Core(object):
 
         await context.plugin.close_session(
             context.session, args)
+
+    def context(self, plugin_id, args):
+        """Controlled context to use in a with statement"""
+        return Core.ControlledContext(self, plugin_id, args)

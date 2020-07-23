@@ -180,6 +180,16 @@ We are using the demo built-in plugin.
 
     await core.delete_context(ctx_1)
 
+With statement
+^^^^^^^^^^^^^^
+
+As an alternative to create_context / delete_context, you can use:
+
+.. code:: python
+
+    async with core.context("demo", {"user": "test2"}) as ctx:
+        pass
+
 Provisioning
 ^^^^^^^^^^^^
 
