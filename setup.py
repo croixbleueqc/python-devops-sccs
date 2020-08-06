@@ -6,7 +6,7 @@ setup(
     version='0.0.1',
     python_requires='>=3.5',
     packages=find_packages(exclude=['tests']),
-    install_requires=[],
+    install_requires=["pygit2"],
 
     # Metadata
     author="Croix Bleue du Quebec",
