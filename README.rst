@@ -178,6 +178,13 @@ We are using the demo built-in plugin.
 
     print(await ctx_1.passthrough("do_you_understand_me_?"))
 
+    # Get continuous deployment configuration
+    print(await ctx_1.get_continuous_deployment_config("REPO_TEST_01"))
+
+    # Trigger continuous deployment (+ print to see the effective change)
+    await ctx_1.trigger_continuous_deployment("REPO_TEST_01", "development", "1.0")
+    print(await ctx_1.get_continuous_deployment_config("REPO_TEST_01"))
+
     await core.delete_context(ctx_1)
 
 With statement

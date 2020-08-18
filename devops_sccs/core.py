@@ -77,6 +77,20 @@ class Core(object):
             """
             return await self.plugin.get_all_repositories_permissions(self.session, args)
 
+        async def get_continuous_deployment_config(self, repository, args=None):
+            """Get continuous deployment configuration
+
+            see plugin.py for function description
+            """
+            return await self.plugin.get_continuous_deployment_config(self.session, repository, args)
+
+        async def trigger_continuous_deployment(self, repository, environment, version, args=None):
+            """Trigger a continuous deployment
+
+            see plugin.py for function description
+            """
+            await self.plugin.trigger_continuous_deployment(self.session, repository, environment, version, args)
+
         # async def create_repository(self, args):
         #     """Create and provision a new repository
 

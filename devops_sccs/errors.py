@@ -34,3 +34,23 @@ class AnswerRequired(SccsException):
 class AnswerValidatorFailure(SccsException):
     def __init__(self, arg, validator):
         super().__init__(f"Argument {arg} failed to be validate with the regex {validator}")
+
+class TriggerCdReadOnly(SccsException):
+    def __init__(self, repository, environment):
+        super().__init__(f"{environment} for {repository} is readonly !")
+
+class TriggerCdNotSupported(SccsException):
+    def __init__(self, repository):
+        super().__init__(f"Continuous Deployment is not supported for {repository}")
+
+class TriggerCdEnvUnsupported(SccsException):
+    def __init__(self, repository, environment):
+        super().__init__(f"Environment {environment} is not supported for {repository}")
+
+class TriggerCdVersionUnsupported(SccsException):
+    def __init__(self, repository, version):
+        super().__init__(f"Version {version} is not supported for {repository}")
+
+class TriggerCdVersionAlreadyDeployed(SccsException):
+    def __init__(self, repository, environment, version):
+        super().__init__(f"Version {version} is already deployed in {environment} for {repository}")

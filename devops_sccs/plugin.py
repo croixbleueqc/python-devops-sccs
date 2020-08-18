@@ -185,3 +185,31 @@ class Sccs(object):
             list(object): TODO: define object in a better way to have an abstraction of what a permission should look like
         """
         raise NotImplementedError()
+
+    async def get_continuous_deployment_config(self, session, repository, args):
+        """Get continuous deployment configuration
+
+        This is not the real state of the deployment in your "production" environment but the state expected
+        based on git status
+
+        Args:
+            session(object): the session
+            repository(str): the repository name
+            args(dict): extr arguments to handle the operation
+
+        Returns:
+            typing.cd.Config: Configuration
+        """
+        raise NotImplementedError()
+
+    async def trigger_continuous_deployment(self, session, repository, environment, version, args):
+        """Trigger a continuous deployment
+
+        Args:
+            session(object): the session
+            repository(str): the repository name
+            environment(str): the environment (eg: production, development, qa, ...)
+            version(str): version to deploy
+            args(dict): extr arguments to handle the operation
+        """
+        raise NotImplementedError()
