@@ -54,3 +54,7 @@ class TriggerCdVersionUnsupported(SccsException):
 class TriggerCdVersionAlreadyDeployed(SccsException):
     def __init__(self, repository, environment, version):
         super().__init__(f"Version {version} is already deployed in {environment} for {repository}")
+
+class AuthorSyntax(SccsException):
+    def __init__(self, author):
+        super().__init__(f"Author {author} is not compliant with the format 'user <user@domain.tld>'")

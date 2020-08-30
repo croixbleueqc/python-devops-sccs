@@ -43,7 +43,7 @@ class Sccs(object):
     Abstract class to create a plugin
     """
 
-    def init(self, args):
+    async def init(self, core, args):
         """
         Initialize the plugin
 
@@ -56,6 +56,7 @@ class Sccs(object):
           this is where you can store those informations to use them when required
         
         Args:
+            core(Core): Core library
             args(dict): static configuration for the plugin
         """
         raise NotImplementedError()
@@ -145,16 +146,27 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
-    # TODO: need some refactoring / just kept as a demo for now
-    # async def create_repository(self, session, args, provision):
-    #     """Create a repository
-        
-    #     The main workflow is:
-    #     - validate args (can be partially done with provision.is_payload_valid)
-    #     - create the repository
-    #     - provision a template (can use provision.execute)
-    #     """
-    #     raise NotImplementedError()
+    async def add_repository(self, session, provision, repository, template, template_params, args):
+        """Add a new repository
+
+        The main workflow is:
+        - Check user permissions to add a new repository
+        - Prepare (verify answers for selected template with repository's name); provision.prepare_provision
+        - Verify if the repository doesn't exist and create it
+        - Store the repository definition somewhere (for tracability, remediation, scheduled validation ...)
+        - Add the new repository (provide git credentials to do it, main branch ...); provision.provision
+        - Enforce security (permissions, branches strategy...)
+        - Return instruction to use the new repository
+
+        Args:
+            session(object): the session
+            provision(Provision): the provision class (provides helpers, templates, etc)
+            repository(dict): Answers to a repository contract
+            template(str): Template to use
+            template_params(dict): Answers to a template contract
+            args(dict): extr arguments to handle the operation
+        """
+        raise NotImplementedError()
 
     async def get_repository_permissions(self, session, repository, args):
         """Get permissions for a specific repository

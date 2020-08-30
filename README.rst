@@ -57,58 +57,110 @@ Plugins configuration
 Provisioning configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-This is an early alpha feature not well documented for now. Please check code source for more details.
-
 The main purpose is to provide a standard way to create new repositories, enable pipelines, fork code from scaffold with custom init support etc.
 
-This config permit to generate templates and frontend contracts that need to be filled to provision a template.
+This config permit to generate templates and contracts that need to be fulfilled to add a new repository.
+
+The next configuration is a possible example. Most part of this configuration is based on the contract/answers strategy (please read "Add a new repository" section).
 
 .. code:: bash
 
     {
-        "checkout_base_path": "/tmp/devops/provision",
-        "templates": {
-            "<scaffold's name>": {
-                <options...>
+        "provision": {
+            "checkout_base_path": "/tmp/devops/provision",
+            "main": {
+                "repository_validator": "^[a-z][a-z,-]*[a-z]$",
+                "template_required": false
             },
-            "scaffold-aiohttp": {
-                "from": {
-                    "git": "git@bitbucket.org:<team>/scaffold-aiohttp.git",
-                    "branch": "dev"
+            "repository": {
+                "project": {
+                    "type": "suggestion",
+                    "description": "Project group",
+                    "required": true,
+                    "roleName": "name",
+                    "values": [
+                        {
+                            "name": "DevOps",
+                            "key": "DO"
+                        },
+                        {
+                            "name": "Proof Of Concept",
+                            "key": "POC"
+                        }
+                    ]
                 },
-                "setup": {
-                    "cmd": [
-                        "python",
-                        "setup.py",
-                        "init"
-                    ],
-                    "args": {
-                        "name": {
-                            "type": "string",
-                            "desc": "Project Name",
-                            "arg": "--name={}",
-                            "required": true,
-                            "default": null,
-                            "validator": "^[a-z][a-z,-]*[a-z]$"
+                "configuration": {
+                    "type": "suggestion",
+                    "description": "Branches strategy",
+                    "required": true,
+                    "roleName": "short",
+                    "values": [
+                        {
+                            "short": "master; depoy/*",
+                            "key": "trunkbased-deploy"
                         },
-                        "desc": {
-                            "type": "string",
-                            "desc": "Description",
-                            "arg": "--desc='{}'",
-                            "required": true,
-                            "default": null,
-                            "validator": null
+                        {
+                            "short": "master only",
+                            "key": "trunkbased"
+                        }
+                    ]
+                },
+                "privileges": {
+                    "type": "suggestion",
+                    "description": "Privileges",
+                    "required": true,
+                    "roleName": "short",
+                    "values": [
+                        {
+                            "short": "DevOps (Admin)",
+                            "key": "devops-full-only"
                         },
-                        "helloworld": {
-                            "type": "bool",
-                            "desc": "Remove helloworld",
-                            "arg": {
-                                "true": "-c",
-                                "false": null
+                        {
+                            "short": "Devs",
+                            "key": "dev-default"
+                        }
+                    ]
+                }
+            },
+            "templates": {
+                "scaffold-aiohttp": {
+                    "from": {
+                        "git": "https://github.com/croixbleueqc/scaffold-aiohttp",
+                        "main_branch": "master",
+                        "other_branches": []
+                    },
+                    "setup": {
+                        "cmd": [
+                            "python",
+                            "setup.py",
+                            "init"
+                        ],
+                        "args": {
+                            "name": {
+                                "type": "string",
+                                "description": "Project Name",
+                                "required": true,
+                                "default": null,
+                                "validator": "^[a-z][a-z,-]*[a-z]$",
+                                "arg": "--name={}"
                             },
-                            "required": true,
-                            "default": false,
-                            "validator": null
+                            "desc": {
+                                "type": "string",
+                                "description": "Description",
+                                "required": true,
+                                "default": null,
+                                "validator": ".+",
+                                "arg": "--desc='{}'"
+                            },
+                            "helloworld": {
+                                "type": "bool",
+                                "description": "Remove helloworld",
+                                "default": true,
+                                "arg": {
+                                    "true": "-c",
+                                    "false": null
+                                }
+                            }
                         }
                     }
                 }
@@ -135,7 +187,7 @@ Initialize DevOps Sccs lib
         with open("config.json", "r") as f:
             config = json.loads(f.read())
 
-        core = Core(config)
+        core = await Core.create(config)
     
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
@@ -185,6 +237,39 @@ We are using the demo built-in plugin.
     await ctx_1.trigger_continuous_deployment("REPO_TEST_01", "development", "1.0")
     print(await ctx_1.get_continuous_deployment_config("REPO_TEST_01"))
 
+    # Get add repository contract
+    print(ctx_1.get_add_repository_contract())
+
+    # Add a new repository (not supported with the demo plugin but showing how to use it based on README configuration provided)
+    repository = {
+        "name": "my-new-project",
+        "project": {
+            "name": "Proof Of Concept",
+            "key": "POC"
+        },
+        "configuration": {
+            "short": "master; depoy/*",
+            "key": "trunkbased-deploy"
+        },
+        "privileges": {
+            "short": "Devs",
+            "key": "dev-default"
+        }
+    }
+    template = "hello-scaffold-service"
+    template_params = {
+        "name": "myproject",
+        "desc": "This is a test !",
+        "helloworld": False
+    }
+        
+    await ctx_1.add_repository(
+        repository,
+        template,
+        template_params,
+        args=None
+    )
+
     await core.delete_context(ctx_1)
 
 With statement
@@ -197,15 +282,65 @@ As an alternative to create_context / delete_context, you can use:
     async with core.context("demo", {"user": "test2"}) as ctx:
         pass
 
-Provisioning
-^^^^^^^^^^^^
+Add a new repository
+--------------------
 
-This is an early alpha feature not well documented for now. Please check code source for more details.
+Contract
+^^^^^^^^
+
+A contract permit to explain what it is required to add a new repository.
+A contract is not static and can change mainly with the template involved.
+
+A contract is set with multiple arguments. Each argument is set with the following syntax:
+
+.. code:: bash
+
+    {
+        "key": {
+            "type": "string" | "suggestion" | "bool",
+            "required": true | false,
+            "default": "string" | true | false,
+            "description": "The user friendly description of this argument",
+            "validator": "A python regular expression",
+            "values": [{ ... }, ...],
+            "roleName": "name of a key in a value stored in values array"
+        }
+    }
+
+type, required, default and description are mandatory.
+validator can be used for string type.
+values and roleName are only used with suggestion type.
+
+Answers
+^^^^^^^
+
+Answers is an object that provides an answer for all (or subset) of contract arguments.
+
+An answer for one contract argument following this syntax:
+
+... code:: bash
+
+    {
+        "key": "string" | true | false | { one value in values }
+    }
+
+Repository name
+^^^^^^^^^^^^^^^
+
+The key "name" is reserved in the repository contract. Despite this key doesn't exist in your own repository contract, the provision system will automatically add it on top of the contract.
+
+How can I get all contracts to add a new repository
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code:: python
 
-    print(core.provision.get_templates())
-    print(core.provision.get_frontend_templates())
+    ctx.get_add_repository_contract()
+
+Create a new repository
+^^^^^^^^^^^^^^^^^^^^^^^
+
+You need to select wich template do you want to use from what is available in get_add_repository_contract().
+Once selected you need to fulfill all contracts for repository, template and template parameters. Please read the "Commands available with a plugin" section
 
 Write a plugin
 --------------
@@ -254,7 +389,7 @@ As the bitbucket library is not compatible with asyncio, some helper functions (
     class BitbucketCloud(Sccs):
         POOL="bc"
 
-        def init(self, args):
+        async def init(self, core, args):
             getCoreAioify().create_thread_pool(
                 self.POOL,
                 max_workers=args.get("max_workers", 5) if args else 5

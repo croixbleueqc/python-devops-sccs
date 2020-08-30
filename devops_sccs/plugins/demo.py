@@ -29,7 +29,7 @@ from ..utils import cd as utils_cd
 import hashlib
 
 class Demo(Sccs):
-    def init(self, args):
+    async def init(self, core, args):
         # Mock few repositories with permissions
         self.FAKE_DATA = {
             "test": {

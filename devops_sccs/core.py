@@ -91,13 +91,17 @@ class Core(object):
             """
             await self.plugin.trigger_continuous_deployment(self.session, repository, environment, version, args)
 
-        # async def create_repository(self, args):
-        #     """Create and provision a new repository
+        def get_add_repository_contract(self):
+            """Get the contract to add a new repository.
+            """
+            return self._core.provision.get_add_repository_contract()
 
-        #     see plugin.py for function description
-        #     """
+        async def add_repository(self, repository, template,  template_params, args=None):
+            """Add a new repository
 
-        #     return await self.plugin.create_repository(self.session, args, self._core.provision)
+            see plugin.py for function description
+            """
+            return await self.plugin.add_repository(self.session, self._core.provision, repository, template,  template_params, args)
 
     class ControlledContext:
         """Create/Delete context in a with statement"""
@@ -114,21 +118,28 @@ class Core(object):
         async def __aexit__(self, exc_type, exc, tb):
             await self.core.delete_context(self.ctx)
 
-    def __init__(self, config={}):
+    def __init__(self):
         """Initialize plugins and internal modules"""
         self.plugins = {}
 
-        self.load_builtin_plugins(config.get("plugins", {}))
+    @classmethod
+    async def create(cls, config={}):
+        self = Core()
 
-        self.load_external_plugins(config.get("plugins", {}))
-
-        # TODO: refactor the provision feature. see plugin.py / create_repository() description
         self.provision = Provision(
-            config.get("checkout_base_path", "/tmp/devops/provision"),
-            templates=config.get("templates", {})
+            config["provision"].get("checkout_base_path", "/tmp"),
+            main=config["provision"]["main"],
+            repository=config["provision"].get("repository", {}),
+            templates=config["provision"].get("templates", {})
             )
 
-    def load_builtin_plugins(self, plugins_config):
+        await self.load_builtin_plugins(config.get("plugins", {}))
+
+        await self.load_external_plugins(config.get("plugins", {}))
+        
+        return self
+
+    async def load_builtin_plugins(self, plugins_config):
         """Built-in plugins
         
         A config can be passed to skip/or config some built-in plugins.
@@ -140,9 +151,9 @@ class Core(object):
 
         if builtin.get("demo", True):
             plugin_id, plugin = plugin_demo.init_plugin()
-            self.register(plugin_id, plugin, config.get("demo"))
+            await self.register(plugin_id, plugin, config.get("demo"))
 
-    def load_external_plugins(self, plugins_config):
+    async def load_external_plugins(self, plugins_config):
         """External plugins
         
         All files with .py extension will be loaded
@@ -161,14 +172,14 @@ class Core(object):
             spec.loader.exec_module(mod)
 
             plugin_id, plugin = mod.init_plugin()
-            self.register(plugin_id, plugin, config.get(plugin_id))
+            await self.register(plugin_id, plugin, config.get(plugin_id))
 
-    def register(self, plugin_id, plugin, config):
+    async def register(self, plugin_id, plugin, config):
         """Register a plugin to make it available"""
         if plugin_id in self.plugins:
             raise PluginAlreadyRegistered(plugin_id)
 
-        plugin.init(config)
+        await plugin.init(self, config)
         self.plugins[plugin_id] = plugin
 
     async def create_context(self, plugin_id, args):
