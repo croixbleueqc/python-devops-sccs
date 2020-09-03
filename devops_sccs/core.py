@@ -103,6 +103,34 @@ class Core(object):
             """
             return await self.plugin.add_repository(self.session, self._core.provision, repository, template,  template_params, args)
 
+        async def compliance(self, remediation=False, report=False, args=None):
+            """Check if all repositories are compliants
+
+            see plugin.py for function description
+            """
+            return await self.plugin.compliance(self.session, remediation, report, args)
+
+        async def compliance_report(self, args=None):
+            """Provides a compliance report about all repositories
+
+            see plugin.py for function description
+            """
+            return await self.plugin.compliance_report(self.session, args)
+
+        async def compliance_repository(self, repository, remediation=False, report=False, args=None):
+            """Check if a repository is compliant
+
+            see plugin.py for function description
+            """
+            return await self.plugin.compliance_repository(self.session, repository, remediation, report, args)
+
+        async def compliance_report_repository(self, repository, args=None):
+            """Provides a compliance report for the repository
+
+            see plugin.py for function description
+            """
+            return await self.plugin.compliance_report_repository(self.session, repository, args)
+
     class ControlledContext:
         """Create/Delete context in a with statement"""
 

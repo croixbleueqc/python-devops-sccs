@@ -58,3 +58,6 @@ class TriggerCdVersionAlreadyDeployed(SccsException):
 class AuthorSyntax(SccsException):
     def __init__(self, author):
         super().__init__(f"Author {author} is not compliant with the format 'user <user@domain.tld>'")
+
+class AccessForbidden(SccsException):
+    pass
