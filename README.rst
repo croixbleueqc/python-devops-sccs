@@ -270,6 +270,10 @@ We are using the demo built-in plugin.
         args=None
     )
 
+    # Compliance (see alternative with: compliance_report, compliance_repository, compliance_report_repository)
+    r = await ctx_1.compliance(report=True)
+    print(json.dumps(r, sort_keys=True, indent=4))
+
     await core.delete_context(ctx_1)
 
 With statement
@@ -308,7 +312,9 @@ A contract is set with multiple arguments. Each argument is set with the followi
     }
 
 type, required, default and description are mandatory.
+
 validator can be used for string type.
+
 values and roleName are only used with suggestion type.
 
 Answers
@@ -318,7 +324,7 @@ Answers is an object that provides an answer for all (or subset) of contract arg
 
 An answer for one contract argument following this syntax:
 
-... code:: bash
+.. code:: bash
 
     {
         "key": "string" | true | false | { one value in values }
@@ -340,6 +346,7 @@ Create a new repository
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 You need to select wich template do you want to use from what is available in get_add_repository_contract().
+
 Once selected you need to fulfill all contracts for repository, template and template parameters. Please read the "Commands available with a plugin" section
 
 Write a plugin
