@@ -24,6 +24,7 @@ Core provides abstraction and plugins support to communicate with different sour
 
 import importlib.util
 import os
+import sys
 import glob
 import logging
 
@@ -191,6 +192,8 @@ class Core(object):
 
         if external_path is None:
             return
+
+        sys.path.append(external_path)
 
         config = plugins_config.get("config", {})
         
