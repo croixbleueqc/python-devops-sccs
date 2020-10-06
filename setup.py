@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='devops_sccs',
-    version='0.0.2',
+    version='0.0.3',
     python_requires='>=3.5',
     packages=find_packages(exclude=['tests']),
     install_requires=["pygit2", "typing-engine>=2.0.0"],

@@ -237,6 +237,12 @@ We are using the demo built-in plugin.
     await ctx_1.trigger_continuous_deployment("REPO_TEST_01", "development", "1.0")
     print(await ctx_1.get_continuous_deployment_config("REPO_TEST_01"))
 
+    # List all environments that can be used to run the application
+    print(await ctx_1.get_runnable_environments("REPO_TEST_01"))
+
+    # Bridge repository/environment to a kubernetes namespace
+    print(await ctx1.bridge_repository_to_namespace("REPO_TEST_01", "env"))
+
     # Get add repository contract
     print(ctx_1.get_add_repository_contract())
 

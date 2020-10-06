@@ -92,6 +92,20 @@ class Core(object):
             """
             await self.plugin.trigger_continuous_deployment(self.session, repository, environment, version, args)
 
+        async def get_runnable_environments(self, repository, args=None):
+            """List all environments that can be used to run the application
+
+            see plugin.py for function description
+            """
+            return await self.plugin.get_runnable_environments(self.session, repository, args)
+
+        async def bridge_repository_to_namespace(self, repository, environment, untrustable=True, args=None):
+            """Bridge repository/environment to a kubernetes namespace
+
+            see plugin.py for function description
+            """
+            return await self.plugin.bridge_repository_to_namespace(self.session, repository, environment, untrustable, args)
+
         def get_add_repository_contract(self):
             """Get the contract to add a new repository.
             """

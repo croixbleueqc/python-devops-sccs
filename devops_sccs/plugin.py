@@ -226,6 +226,50 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
+    async def get_runnable_environments(self, session, repository, args):
+        """List all environments that can be used to run the application
+
+        Args:
+            session(object): the session
+            repository(str): the repository name
+            args(dict): extr arguments to handle the operation
+
+        Returns:
+            list(str): list of environments
+        """
+        raise NotImplementedError()
+
+    async def bridge_repository_to_namespace(self, session, repository, environment, untrustable, args):
+        """Bridge repository/environment to a kubernetes namespace
+
+        EXPERIMENTAL FEATURE
+
+        The bridge permit to provide the namespace associated with a repository. This API is really experimental because it assumes
+        that a repository equal one namepace. This is a wrong assumption and will need to be reviewed.
+
+        This function will be called in an untrustable way by the kubernetes backend. Kubernetes backend will fully rely on sccs to validate the request.
+
+        Return dict object:
+        {
+            "cluster": <kubernetes cluster name usable by python-devops-kubernetes>,
+            "namespace": "",
+            "repository": {
+                "write_access": <True|False>
+            }
+        }
+
+        Args:
+            session(object): the session
+            repository(str): the repository name
+            environment(str): the environment (eg: production, development, qa, ...)
+            unstrustable(bool): used to enforce controls on the plugin to distinguish a critical request from the kubernetes backend
+            args(dict): extr arguments to handle the operation
+
+        Returns:
+            dict: a bridge object
+        """
+        raise NotImplementedError()
+
     async def compliance(self, session, remediation, report, args):
         """Check if all repositories are compliants
 
@@ -282,3 +326,4 @@ class Sccs(object):
             dict: a compliance report for the repository
         """
         raise NotImplementedError()
+
