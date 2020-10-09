@@ -90,7 +90,7 @@ class Core(object):
 
             see plugin.py for function description
             """
-            await self.plugin.trigger_continuous_deployment(self.session, repository, environment, version, args)
+            return await self.plugin.trigger_continuous_deployment(self.session, repository, environment, version, args)
 
         async def get_runnable_environments(self, repository, args=None):
             """List all environments that can be used to run the application

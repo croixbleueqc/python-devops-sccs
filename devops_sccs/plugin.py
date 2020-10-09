@@ -223,6 +223,9 @@ class Sccs(object):
             environment(str): the environment (eg: production, development, qa, ...)
             version(str): version to deploy
             args(dict): extr arguments to handle the operation
+
+        Returns:
+            typing.cd.EnvironmentConfig: new configuration for the environment
         """
         raise NotImplementedError()
 

@@ -32,6 +32,7 @@ class EnvironmentConfig(Typing2):
     environment = Field()
     version = Field()
     readonly = Field(instanciator=bool, default=False)
+    pullrequest = Field()
 
 class Available(Typing2):
     """
