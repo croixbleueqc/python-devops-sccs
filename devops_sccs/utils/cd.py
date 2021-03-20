@@ -21,13 +21,14 @@ Continuous Deployment Helper module
 
 from ..errors import TriggerCdNotSupported, TriggerCdReadOnly, TriggerCdEnvUnsupported, TriggerCdVersionUnsupported, TriggerCdVersionAlreadyDeployed
 
-def trigger_prepare(config, repository, environment, version):
+def trigger_prepare(continuous_deployment, versions_available, repository, environment, version):
     """
     Check conformity to trigger a deployment
     Extract involved configurations from the global config
 
     Args:
-        config(typing.cd.Config): The configuration
+        continuous_deployment(typing.cd.EnvironmentConfig): The configuration
+        versions_available(list(typing.cd.Available)): List of versions available 
         repository(str): the repository name
         environment(str): the environment (eg: production, development, qa, ...)
         version(str): version to deploy
@@ -35,23 +36,19 @@ def trigger_prepare(config, repository, environment, version):
     Returns:
         typing.cd.EnvironmentConfig, typing.cd.Available: Environment configuration target, Available Deployment target
     """
-    env_config = config.get_environment_by_env(environment)
-    available_config = config.get_available_by_version(version)
 
-    if env_config is None:
-        raise TriggerCdEnvUnsupported(repository, environment)
-
-    if env_config.readonly:
+    if continuous_deployment.readonly:
         raise TriggerCdReadOnly(repository, environment)
 
-    if available_config is None:
-        raise TriggerCdVersionUnsupported(repository, version)
-
-    if env_config.version == available_config.version:
+    if continuous_deployment.version == version:
         raise TriggerCdVersionAlreadyDeployed(repository, environment, version)
-    
-    return env_config, available_config
 
-def trigger_not_supported(repository):
-    """Trigger Continuous Delivery is not supported for this repository"""
-    raise TriggerCdNotSupported(repository)
+    for available in versions_available:
+        if available.version == version:
+            return continuous_deployment, available
+
+    raise TriggerCdVersionUnsupported(repository, version)
+
+def trigger_not_supported(repository, environment):
+    """Trigger Continuous Deployment is not supported for this repository/environment"""
+    raise TriggerCdEnvUnsupported(repository, environment)

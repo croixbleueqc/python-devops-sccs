@@ -61,6 +61,12 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
+    async def cleanup(self):
+        """
+        Cleanup the plugin as it will be removed
+        """
+        raise NotImplementedError()
+
     def get_session_id(self, args):
         """
         Permit to generate the same session id for the same significant arguments.
@@ -198,7 +204,7 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
-    async def get_continuous_deployment_config(self, session, repository, args):
+    async def get_continuous_deployment_config(self, session, repository, environments, args):
         """Get continuous deployment configuration
 
         This is not the real state of the deployment in your "production" environment but the state expected
@@ -207,10 +213,26 @@ class Sccs(object):
         Args:
             session(object): the session
             repository(str): the repository name
+            environments(list(str)): filter to those environments only (None for all)
             args(dict): extr arguments to handle the operation
 
         Returns:
-            typing.cd.Config: Configuration
+            list(typing.cd.EnvironmentConfig): Configuration for filtered environments
+        """
+        raise NotImplementedError()
+
+    async def get_continuous_deployment_versions_available(self, session, repository, args):
+        """Get continuous deployment versions available
+
+        This is a list of versions that can be used to trigger a continuous deployment
+
+        Args:
+            session(object): the session
+            repository(str): the repository name
+            args(dict): extr arguments to handle the operation
+
+        Returns:
+            list(typing.cd.Available): Versions available
         """
         raise NotImplementedError()
 
@@ -229,7 +251,7 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
-    async def get_runnable_environments(self, session, repository, args):
+    async def get_continuous_deployment_environments_available(self, session, repository, args):
         """List all environments that can be used to run the application
 
         Args:
@@ -238,7 +260,7 @@ class Sccs(object):
             args(dict): extr arguments to handle the operation
 
         Returns:
-            list(str): list of environments
+            list(typing.cd.EnvironmentConfig): list of environments
         """
         raise NotImplementedError()
 

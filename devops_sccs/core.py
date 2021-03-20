@@ -30,6 +30,8 @@ import logging
 
 from .errors import PluginNotRegistered, PluginAlreadyRegistered
 from .provision import Provision
+from .context import Context
+from .realtime.scheduler import Scheduler
 
 # Built-in plugins
 from .plugins import demo as plugin_demo
@@ -39,112 +41,6 @@ class Core(object):
     Manages source code control systems
     Manages a standard workflow to use a specific source code control system
     """
-
-    class Context(object):
-        """
-        Context permits to communicate with a source code control system for a specific session.
-        A session is an abstract concept that can hold nothing or any object type understandable by the plugin which issued it.
-        """
-        def __init__(self, session, plugin, core):
-            self.session = session
-            self.plugin = plugin
-            self._core = core
-        
-        async def passthrough(self, request, args=None):
-            """Passthough
-
-            see plugin.py for function description
-            """
-            return await self.plugin.passthrough(self.session, request, args)
-        
-        async def get_repositories(self, args=None):
-            """Get a list of repositories
-            
-            see plugin.py for function description
-            """
-            return await self.plugin.get_repositories(self.session, args)
-
-        async def get_repository_permissions(self, repository, args=None):
-            """Get permissions for a specific repository
-            
-            see plugin.py for function description
-            """
-            return await self.plugin.get_repository_permissions(self.session, repository, args)
-
-        async def get_all_repositories_permissions(self, args=None):
-            """Get permisions for all accessible repositories
-            
-            see plugin.py for function description
-            """
-            return await self.plugin.get_all_repositories_permissions(self.session, args)
-
-        async def get_continuous_deployment_config(self, repository, args=None):
-            """Get continuous deployment configuration
-
-            see plugin.py for function description
-            """
-            return await self.plugin.get_continuous_deployment_config(self.session, repository, args)
-
-        async def trigger_continuous_deployment(self, repository, environment, version, args=None):
-            """Trigger a continuous deployment
-
-            see plugin.py for function description
-            """
-            return await self.plugin.trigger_continuous_deployment(self.session, repository, environment, version, args)
-
-        async def get_runnable_environments(self, repository, args=None):
-            """List all environments that can be used to run the application
-
-            see plugin.py for function description
-            """
-            return await self.plugin.get_runnable_environments(self.session, repository, args)
-
-        async def bridge_repository_to_namespace(self, repository, environment, untrustable=True, args=None):
-            """Bridge repository/environment to a kubernetes namespace
-
-            see plugin.py for function description
-            """
-            return await self.plugin.bridge_repository_to_namespace(self.session, repository, environment, untrustable, args)
-
-        def get_add_repository_contract(self):
-            """Get the contract to add a new repository.
-            """
-            return self._core.provision.get_add_repository_contract()
-
-        async def add_repository(self, repository, template,  template_params, args=None):
-            """Add a new repository
-
-            see plugin.py for function description
-            """
-            return await self.plugin.add_repository(self.session, self._core.provision, repository, template,  template_params, args)
-
-        async def compliance(self, remediation=False, report=False, args=None):
-            """Check if all repositories are compliants
-
-            see plugin.py for function description
-            """
-            return await self.plugin.compliance(self.session, remediation, report, args)
-
-        async def compliance_report(self, args=None):
-            """Provides a compliance report about all repositories
-
-            see plugin.py for function description
-            """
-            return await self.plugin.compliance_report(self.session, args)
-
-        async def compliance_repository(self, repository, remediation=False, report=False, args=None):
-            """Check if a repository is compliant
-
-            see plugin.py for function description
-            """
-            return await self.plugin.compliance_repository(self.session, repository, remediation, report, args)
-
-        async def compliance_report_repository(self, repository, args=None):
-            """Provides a compliance report for the repository
-
-            see plugin.py for function description
-            """
-            return await self.plugin.compliance_report_repository(self.session, repository, args)
 
     class ControlledContext:
         """Create/Delete context in a with statement"""
@@ -164,23 +60,29 @@ class Core(object):
     def __init__(self):
         """Initialize plugins and internal modules"""
         self.plugins = {}
+        self.scheduler = Scheduler()
 
     @classmethod
     async def create(cls, config={}):
         self = Core()
 
-        self.provision = Provision(
-            config["provision"].get("checkout_base_path", "/tmp"),
-            main=config["provision"]["main"],
-            repository=config["provision"].get("repository", {}),
-            templates=config["provision"].get("templates", {})
-            )
+        if config.get("provision") is not None:
+            self.provision = Provision(
+                config["provision"].get("checkout_base_path", "/tmp"),
+                main=config["provision"]["main"],
+                repository=config["provision"].get("repository", {}),
+                templates=config["provision"].get("templates", {})
+                )
 
         await self.load_builtin_plugins(config.get("plugins", {}))
 
         await self.load_external_plugins(config.get("plugins", {}))
         
         return self
+
+    async def cleanup(self):
+        for plugin_id in list(self.plugins.keys()):
+            await self.unregister(plugin_id)
 
     async def load_builtin_plugins(self, plugins_config):
         """Built-in plugins
@@ -227,6 +129,10 @@ class Core(object):
         await plugin.init(self, config)
         self.plugins[plugin_id] = plugin
 
+    async def unregister(self, plugin_id):
+        plugin = self.plugins.pop(plugin_id)
+        await plugin.cleanup()
+
     async def create_context(self, plugin_id, args):
         """Create a context
         
@@ -242,7 +148,7 @@ class Core(object):
 
         session = await plugin.open_session(session_id, args)
 
-        return Core.Context(session, plugin, self)
+        return Context(session, plugin, self)
 
     async def delete_context(self, context, args=None):
         """Delete a context by closing a session"""

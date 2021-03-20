@@ -88,6 +88,9 @@ class Demo(Sccs):
             }
         }
 
+    async def cleanup(self):
+        pass
+
     def get_session_id(self, args):
         return hashlib.sha256(str(args).encode()).hexdigest()
 

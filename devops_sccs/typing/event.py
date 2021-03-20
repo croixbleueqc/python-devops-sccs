@@ -1,3 +1,9 @@
+"""
+Event Typing
+
+Event triggered by the realtime module
+"""
+
 # Copyright 2020 Croix Bleue du Québec
 
 # This file is part of python-devops-sccs.
@@ -15,9 +21,20 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Typing2
+from typing_engine.typing import Typing2, Field
+from enum import Enum
 
-class WatcherTyping2(Typing2):
-    def __init__(self, key, data=None, parent=None):
-        self.key = key
-        Typing2.__init__(self, data=data, parent=parent)
+class EventType(Enum):
+    ADDED = "ADDED"
+    MODIFIED = "MODIFIED"
+    DELETED  = "DELETED"
+    INFO = "INFO"
+
+    def __str__(self):
+        return self.value
+
+class Event(Typing2):
+    key = Field()
+    type_ = Field(instanciator=EventType).converter(dumps=str).mapping("type")
+    value = Field()
+

@@ -21,9 +21,10 @@ Define standard typing to manage continuous deployment
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Typing2, Field
+from typing_engine.typing import Field
+from . import WatcherTyping2
 
-class EnvironmentConfig(Typing2):
+class EnvironmentConfig(WatcherTyping2):
     """
     Defines which version is deployed on a specific environment.
     
@@ -34,30 +35,39 @@ class EnvironmentConfig(Typing2):
     readonly = Field(instanciator=bool, default=False)
     pullrequest = Field()
 
-class Available(Typing2):
+    def __eq__(self, other):
+        if not isinstance(other, EnvironmentConfig):
+            return False
+        
+        return self.environment == other.environment and \
+                self.version == other.version and \
+                self.readonly == other.readonly and \
+                self.pullrequest == other.pullrequest
+
+    def __hash__(self):
+        return hash((
+            self.environment,
+            self.version,
+            self.readonly,
+            self.pullrequest
+        ))
+
+class Available(WatcherTyping2):
     """
     Defines an available deployment (typically generated from a pipeline) with a build number and an associated version.
     """
     build = Field()
     version = Field()
 
-class Config(Typing2):
-    """
-    Continuous Deployment Configuration
-    """
-    availables = Field().list_of(Available)
-    environments = Field().list_of(EnvironmentConfig)
-
-    def get_environment_by_env(self, env):
-        for i in self.environments:
-            if i.environment == env:
-                return i
+    def __eq__(self, other):
+        if not isinstance(other, Available):
+            return False
         
-        return None
+        return self.build == other.build and \
+                self.version == other.version
 
-    def get_available_by_version(self, version):
-        for i in self.availables:
-            if i.version == version:
-                return i
-        
-        return None
+    def __hash__(self):
+        return hash((
+            self.build,
+            self.version
+        ))
