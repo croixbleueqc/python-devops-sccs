@@ -114,12 +114,28 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
-    async def close_session(self, session, args):
+    async def close_session(self, session_id, session, args):
         """Close a session
         
         Args:
             session(object): the session
             args(dict): extr arguments to handle the operation
+        """
+        raise NotImplementedError()
+
+    async def accesscontrol(self, session, repository, action, args):
+        """Access Control
+
+        Control if the action can be done for this repository on this session
+
+        Args:
+            session(object): the session
+            repository(dict): Answers to a repository contract
+            action(admission.Actions): Action requested
+            args(dict): extr arguments to handle the operation
+
+        Exceptions:
+            AccessForbidden: Access forbidden
         """
         raise NotImplementedError()
 
@@ -139,7 +155,7 @@ class Sccs(object):
         raise NotImplementedError()
 
     async def get_repositories(self, session, args):
-        """Get a list of repositories
+        """Get a list of repositories (with permission for each)
 
         This list can be restricted to what is visible only based on requester's permissions.
 
@@ -148,7 +164,21 @@ class Sccs(object):
             args(dict): extr arguments to handle the operation
         
         Returns:
-            list(object): TODO: define object in a better way to have an abstraction of what a repo should look like
+            list(typing.repositories.Repository): List of repository
+        """
+        raise NotImplementedError()
+
+    async def get_repository(self, session, repository, args):
+        """Get a specific repository (with permission)
+
+        Args:
+            session(object): the session 
+            repository(str): the repository name
+            args(dict): extr arguments to handle the operation
+        
+        Returns:
+            typing.repositories.Repository: a repository
+
         """
         raise NotImplementedError()
 
@@ -171,36 +201,6 @@ class Sccs(object):
             template(str): Template to use
             template_params(dict): Answers to a template contract
             args(dict): extr arguments to handle the operation
-        """
-        raise NotImplementedError()
-
-    async def get_repository_permissions(self, session, repository, args):
-        """Get permissions for a specific repository
-
-        Args should at least contains the repository name.
-        
-        Args:
-            session(object): the session 
-            repository(str): the repository name
-            args(dict): extr arguments to handle the operation
-        
-        Returns:
-            object: TODO: define object in a better way to have an abstraction of what a permission should look like
-
-        """
-        raise NotImplementedError()
-
-    async def get_all_repositories_permissions(self, session, args):
-        """Get permisions for all accessible repositories
-        
-        This list can be restricted to what is visible only based on requester's permissions.
-        
-        Args:
-            session(object): the session
-            args(dict): extr arguments to handle the operation
-        
-        Returns:
-            list(object): TODO: define object in a better way to have an abstraction of what a permission should look like
         """
         raise NotImplementedError()
 

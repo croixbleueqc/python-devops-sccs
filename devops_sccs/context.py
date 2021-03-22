@@ -15,6 +15,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
+from .accesscontrol import Actions
+
 class Context(object):
     """
     Context permits to communicate with a source code control system for a specific session.
@@ -24,11 +26,20 @@ class Context(object):
     UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG="a7d7cba8-1a49-426c-9811-29022aca1a5a"
     UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE="40e9a2d5-fc22-497e-a364-d19115321ba2"
     UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE="7f7cd008-3350-47b7-80ce-9472e3a649c1"
+    UUID_WATCH_REPOSITORIES="865eb6e0-ded6-4cae-834b-603a22293086"
 
-    def __init__(self, session, plugin, core):
+    def __init__(self, session_id, session, plugin, core):
+        self.session_id = session_id
         self.session = session
         self.plugin = plugin
         self._core = core
+
+    async def accesscontrol(self, repository, action, args=None):
+        """Access Control
+
+        see plugin.py for function description
+        """
+        return await self.plugin.accesscontrol(self.session, repository, action, args)
     
     async def passthrough(self, request, args=None):
         """Passthough
@@ -38,25 +49,29 @@ class Context(object):
         return await self.plugin.passthrough(self.session, request, args)
     
     async def get_repositories(self, args=None):
-        """Get a list of repositories
-        
+        """Get a list of repositories (with permission for each)
+
         see plugin.py for function description
         """
         return await self.plugin.get_repositories(self.session, args)
 
-    async def get_repository_permissions(self, repository, args=None):
-        """Get permissions for a specific repository
-        
-        see plugin.py for function description
-        """
-        return await self.plugin.get_repository_permissions(self.session, repository, args)
+    async def watch_repositories(self, args=None, poll_interval=3600):
+        """Watch for get_repositories"""
 
-    async def get_all_repositories_permissions(self, args=None):
-        """Get permisions for all accessible repositories
+        return self._core.scheduler.watch(
+            (Context.UUID_WATCH_REPOSITORIES, self.session_id),
+            poll_interval,
+            self.plugin.get_repositories,
+            session=self.session, # NOT shared; we don't need to explicitly call access control.
+            args=args
+        )
+
+    async def get_repository(self, repository, args=None):
+        """Get a specific repository (with permission)
         
         see plugin.py for function description
         """
-        return await self.plugin.get_all_repositories_permissions(self.session, args)
+        return await self.plugin.get_repository(self.session, repository, args)
 
     async def get_continuous_deployment_config(self, repository, environments=None, args=None):
         """Get continuous deployment configuration
@@ -65,8 +80,10 @@ class Context(object):
         """
         return await self.plugin.get_continuous_deployment_config(self.session, repository, environments, args)
 
-    def watch_continuous_deployment_config(self, repository, environments=None, args=None, poll_interval=60):
+    async def watch_continuous_deployment_config(self, repository, environments=None, args=None, poll_interval=60):
         """Watch for get_continuous_deployment_config"""
+
+        await self.accesscontrol(repository, Actions.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
 
         def filtering_by_environment(event):
             if environments and event.value.environment not in environments:
@@ -76,8 +93,9 @@ class Context(object):
         return self._core.scheduler.watch(
             (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository),
             poll_interval,
-            self.get_continuous_deployment_config,
+            self.plugin.get_continuous_deployment_config,
             filtering=filtering_by_environment,
+            session=None, # Shared session
             repository=repository,
             args=args
         )
@@ -89,13 +107,16 @@ class Context(object):
         """
         return await self.plugin.get_continuous_deployment_versions_available(self.session, repository, args)
 
-    def watch_continuous_deployment_versions_available(self, repository, args=None, poll_interval=120):
+    async def watch_continuous_deployment_versions_available(self, repository, args=None, poll_interval=120):
         """watch for get_continuous_deployment_versions_available"""
+
+        await self.accesscontrol(repository, Actions.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
 
         return self._core.scheduler.watch(
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repository),
             poll_interval,
-            self.get_continuous_deployment_versions_available,
+            self.plugin.get_continuous_deployment_versions_available,
+            session=None, # Shared session
             repository=repository,
             args=args
         )
@@ -120,13 +141,16 @@ class Context(object):
         """
         return await self.plugin.get_continuous_deployment_environments_available(self.session, repository, args)
 
-    def watch_continuous_deployment_environments_available(self, repository, args=None, poll_interval=120):
+    async def watch_continuous_deployment_environments_available(self, repository, args=None, poll_interval=120):
         """watch for get_continuous_deployment_environments_available"""
+
+        await self.accesscontrol(repository, Actions.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE)
 
         return self._core.scheduler.watch(
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repository),
             poll_interval,
-            self.get_continuous_deployment_environments_available,
+            self.plugin.get_continuous_deployment_environments_available,
+            session=None, # Shared session
             repository=repository,
             args=args
         )
@@ -148,7 +172,13 @@ class Context(object):
 
         see plugin.py for function description
         """
-        return await self.plugin.add_repository(self.session, self._core.provision, repository, template,  template_params, args)
+        result = await self.plugin.add_repository(self.session, self._core.provision, repository, template,  template_params, args)
+
+        self._core.scheduler.notify(
+            (Context.UUID_WATCH_REPOSITORIES, self.session_id)
+        )
+
+        return result
 
     async def compliance(self, remediation=False, report=False, args=None):
         """Check if all repositories are compliants

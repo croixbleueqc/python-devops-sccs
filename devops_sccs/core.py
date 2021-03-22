@@ -148,13 +148,16 @@ class Core(object):
 
         session = await plugin.open_session(session_id, args)
 
-        return Context(session, plugin, self)
+        return Context(session_id, session, plugin, self)
 
     async def delete_context(self, context, args=None):
         """Delete a context by closing a session"""
 
         await context.plugin.close_session(
-            context.session, args)
+            context.session_id,
+            context.session,
+            args
+        )
 
     def context(self, plugin_id, args):
         """Controlled context to use in a with statement"""

@@ -26,6 +26,7 @@ from . import WatcherTyping2
 
 class Repository(WatcherTyping2):
     name = Field()
+    permission = Field()
 
     def __eq__(self, other):
         if not isinstance(other, Repository):

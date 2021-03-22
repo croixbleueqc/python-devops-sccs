@@ -100,7 +100,7 @@ class Demo(Sccs):
             "id": session_id
             }
 
-    async def close_session(self, session, args):
+    async def close_session(self, session_id, session, args):
         pass
 
     async def get_repositories(self, session, args):
