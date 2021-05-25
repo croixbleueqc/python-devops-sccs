@@ -149,7 +149,7 @@ class Provision(object):
                 "description": "Project Name",
                 "required": true,
                 "default": null,
-                "validator": "^[a-z][a-z,-]*[a-z]$",
+                "validator": "^[a-z][a-z,-,0-9]*[a-z]$",
                 "arg": "--name={}"
             },
             "desc": {
