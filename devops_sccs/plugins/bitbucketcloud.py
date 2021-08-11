@@ -1,16 +1,19 @@
-# Copyright 2020 Croix Bleue du Québec
+# Copyright 2020-2021 Croix Bleue du Québec
 
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
+# This file is part of python-devops-sccs.
 
-#     http://www.apache.org/licenses/LICENSE-2.0
+# python-devops-sccs is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# python-devops-sccs is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public License
+# along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
 import logging
@@ -20,6 +23,7 @@ from contextlib import asynccontextmanager
 from aiobitbucket.bitbucket import Bitbucket
 from aiobitbucket.typing.refs import Branch
 from aiobitbucket.apis.repositories.repository import RepoSlug
+from aiobitbucket.errors import NetworkNotFound
 from ..plugin import Sccs
 from ..errors import SccsException
 from ..accesscontrol import AccessForbidden, Actions, Permissions
@@ -334,6 +338,11 @@ class BitbucketCloud(Sccs):
 
                 deploy_branch = repo.refs().branches.by_name(branch)
                 await deploy_branch.get()
+                #If the branch already exist , we should remove it.
+                try:
+                      deploy_branch.delete()
+                except NetworkNotFound :
+                        pass
                 deploy_branch.name = f"continuous-deployment-{environment}"
                 await deploy_branch.create()
             else:
