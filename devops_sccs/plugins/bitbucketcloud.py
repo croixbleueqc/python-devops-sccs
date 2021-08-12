@@ -335,12 +335,12 @@ class BitbucketCloud(Sccs):
 
                 deploy_branch = repo.refs().branches.by_name(branch)
                 await deploy_branch.get()
-                #If the branch already exist , we should remove it.
+                deploy_branch.name = f"continuous-deployment-{environment}"
                 try:
-                      deploy_branch.delete()
+                    #If the branch already exist , we should remove it.
+                    await  deploy_branch.delete()
                 except NetworkNotFound :
                         pass
-                deploy_branch.name = f"continuous-deployment-{environment}"
                 await deploy_branch.create()
             else:
                 deploy_branch = None
