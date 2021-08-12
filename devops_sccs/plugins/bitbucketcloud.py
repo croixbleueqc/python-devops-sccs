@@ -1,4 +1,4 @@
-# Copyright 2020 Croix Bleue du Québec
+# Copyright 2020-2021 Croix Bleue du Québec
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@ from contextlib import asynccontextmanager
 from aiobitbucket.bitbucket import Bitbucket
 from aiobitbucket.typing.refs import Branch
 from aiobitbucket.apis.repositories.repository import RepoSlug
+from aiobitbucket.errors import NetworkNotFound
 from ..plugin import Sccs
 from ..errors import SccsException
 from ..accesscontrol import AccessForbidden, Actions, Permissions
@@ -335,6 +336,11 @@ class BitbucketCloud(Sccs):
                 deploy_branch = repo.refs().branches.by_name(branch)
                 await deploy_branch.get()
                 deploy_branch.name = f"continuous-deployment-{environment}"
+                try:
+                    #If the branch already exist , we should remove it.
+                    await  deploy_branch.delete()
+                except NetworkNotFound :
+                    pass
                 await deploy_branch.create()
             else:
                 deploy_branch = None
