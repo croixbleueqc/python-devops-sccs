@@ -340,7 +340,7 @@ class BitbucketCloud(Sccs):
                     #If the branch already exist , we should remove it.
                     await  deploy_branch.delete()
                 except NetworkNotFound :
-                        pass
+                    pass
                 await deploy_branch.create()
             else:
                 deploy_branch = None
