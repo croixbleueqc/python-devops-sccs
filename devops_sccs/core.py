@@ -5,7 +5,7 @@ Core provides abstraction and plugins support to communicate with different sour
 """
 
 # Copyright 2019 mickybart
-# Copyright 2020 Croix Bleue du Québec
+# Copyright 2020-2022 Croix Bleue du Québec
 
 # This file is part of python-devops-sccs.
 
@@ -28,6 +28,7 @@ import sys
 import glob
 import logging
 
+from devops_sccs.realtime.hookserver import HookServer
 from .errors import PluginNotRegistered, PluginAlreadyRegistered
 from .provision import Provision
 from .context import Context
@@ -37,6 +38,7 @@ from .realtime.scheduler import Scheduler
 from .plugins import demo as plugin_demo
 
 class Core(object):
+    
     """
     Manages source code control systems
     Manages a standard workflow to use a specific source code control system
@@ -65,7 +67,6 @@ class Core(object):
     @classmethod
     async def create(cls, config={}):
         self = Core()
-
         if config.get("provision") is not None:
             self.provision = Provision(
                 config["provision"].get("checkout_base_path", "/tmp"),
@@ -74,15 +75,24 @@ class Core(object):
                 templates=config["provision"].get("templates", {})
                 )
 
+        self.enableHook = config.get("hookServer") is not None
+        if self.enableHook :
+            self.hookServer = HookServer(config["hookServer"])
+            
         await self.load_builtin_plugins(config.get("plugins", {}))
 
         await self.load_external_plugins(config.get("plugins", {}))
         
+        if self.enableHook :
+            self.hookServer.start_server()
+
         return self
 
     async def cleanup(self):
         for plugin_id in list(self.plugins.keys()):
             await self.unregister(plugin_id)
+        if self.enableHook :
+           self.hookServer.stop_server()
 
     async def load_builtin_plugins(self, plugins_config):
         """Built-in plugins
@@ -132,7 +142,7 @@ class Core(object):
     async def unregister(self, plugin_id):
         plugin = self.plugins.pop(plugin_id)
         await plugin.cleanup()
-
+    
     async def create_context(self, plugin_id, args):
         """Create a context
         

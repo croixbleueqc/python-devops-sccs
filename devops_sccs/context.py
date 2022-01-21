@@ -1,4 +1,4 @@
-# Copyright 2021 Croix Bleue du Québec
+# Copyright 2021-2022 Croix Bleue du Québec
 
 # This file is part of python-devops-sccs.
 
@@ -28,6 +28,8 @@ class Context(object):
     UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE="7f7cd008-3350-47b7-80ce-9472e3a649c1"
     UUID_WATCH_REPOSITORIES="865eb6e0-ded6-4cae-834b-603a22293086"
 
+    _core = None
+    
     def __init__(self, session_id, session, plugin, core):
         self.session_id = session_id
         self.session = session
@@ -65,7 +67,15 @@ class Context(object):
             session=self.session, # NOT shared; we don't need to explicitly call access control.
             args=args
         )
-
+    
+    async def hook_repositories(self, args=None):
+        return self._core.scheduler.hook(
+            (Context.UUID_WATCH_REPOSITORIES, self.session_id),
+            self.plugin.get_repositories,
+            session=self.session, # NOT shared; we don't need to explicitly call access control.
+            args=args
+        )
+    
     async def get_repository(self, repository, args=None):
         """Get a specific repository (with permission)
         
@@ -93,6 +103,24 @@ class Context(object):
         return self._core.scheduler.watch(
             (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository),
             poll_interval,
+            self.plugin.get_continuous_deployment_config,
+            filtering=filtering_by_environment,
+            session=None, # Shared session
+            repository=repository,
+            args=args
+        )
+
+    async def hook_continuous_deployment_config(self, repository, environments=None, args=None):
+        """get and update for get_continuous_deployment_config"""
+        await self.accesscontrol(repository, Actions.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
+
+        def filtering_by_environment(event):
+            if environments and event.value.environment not in environments:
+                return False
+            return True
+
+        return self._core.scheduler.hook(
+            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository),
             self.plugin.get_continuous_deployment_config,
             filtering=filtering_by_environment,
             session=None, # Shared session
