@@ -164,6 +164,7 @@ class BitbucketCloud(Sccs):
 
                 self.cache["available"][UUID] = local_available
 
+            elif(curr_status_state == commit_status_state.FAILED or commit_status_state.STOPPED):
                 #todo : send an event for failure/stopped
                 pass
 
