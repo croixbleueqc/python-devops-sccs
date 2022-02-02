@@ -17,6 +17,7 @@
 
 from asyncio import Lock,Condition
 from contextlib import asynccontextmanager
+import logging
 
 class RW_Lock (object):
     def __init__(self):
@@ -43,7 +44,7 @@ class RW_Lock (object):
         
 class AsyncCache(object):
     
-    def __init__ (self ,lookup_func=None,key_arg=None, data:dict = {} , **kwargs_func ):
+    def __init__ (self ,lookup_func=None,key_arg=None, data:dict = {} , **kwargs_func):
         """
         loopup_func:async   callable  function to call when a key is not found in the cache
         key_arg:string      name of the key argument 
@@ -53,7 +54,6 @@ class AsyncCache(object):
 
         self.lockCache = RW_Lock()
         self.data = data
-        self.current_task = None
 
         #setup lookup function
         self.lookup_func = lookup_func
@@ -64,22 +64,25 @@ class AsyncCache(object):
         return self.data.get(key)
 
     async def __getitem__(self, key):
+        val = None
         try :
-            async with self.lockCache.read() as RLock:
+            #async with self.lockCache.read() as RLock:
                 val = self.data[key]
+                logging.debug(u"retrived {val} in the cache at location {key}")
         except KeyError as e:
-            
+            logging.debug(u"element {key} not found in the cache! populating it!")
             if self.lookup_func is None:
                 raise e
-            
-            async with self.lockCache.write() as WLock:
-                self.kwargs[self.key_arg] = key
-                val = await self.lookup_func(**self.kwargs)
-                self.data[key]=val    
-        finally:
-            return val
+            else:
+               # async with self.lockCache.write() as WLock:
+                    self.kwargs[self.key_arg] = key
+                    val = await self.lookup_func(**self.kwargs)
+                    self.data[key]=val
+                    
+        return val
 
     def __setitem__(self, key, item) :
+            logging.debug(u"assign {item} to {key}")
             self.data[key]=item
         
     def __del__(self):

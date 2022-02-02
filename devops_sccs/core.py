@@ -26,7 +26,6 @@ import importlib.util
 import os
 import sys
 import glob
-import logging
 
 from devops_sccs.realtime.hookserver import HookServer
 from .errors import PluginNotRegistered, PluginAlreadyRegistered
@@ -43,7 +42,7 @@ class Core(object):
     Manages source code control systems
     Manages a standard workflow to use a specific source code control system
     """
-
+    
     class ControlledContext:
         """Create/Delete context in a with statement"""
 
@@ -75,9 +74,9 @@ class Core(object):
                 templates=config["provision"].get("templates", {})
                 )
 
-        self.enableHook = config.get("hookServer") is not None
+        self.enableHook = config.get("hook_server") is not None
         if self.enableHook :
-            self.hookServer = HookServer(config["hookServer"])
+            self.hookServer = HookServer(config["hook_server"])
             
         await self.load_builtin_plugins(config.get("plugins", {}))
 
@@ -89,10 +88,11 @@ class Core(object):
         return self
 
     async def cleanup(self):
-        for plugin_id in list(self.plugins.keys()):
-            await self.unregister(plugin_id)
         if self.enableHook :
            self.hookServer.stop_server()
+
+        for plugin_id in list(self.plugins.keys()):
+            await self.unregister(plugin_id)
 
     async def load_builtin_plugins(self, plugins_config):
         """Built-in plugins

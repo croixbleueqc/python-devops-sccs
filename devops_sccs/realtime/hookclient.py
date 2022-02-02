@@ -24,9 +24,8 @@ Provide a way to recive an hook event and to stream results to the diverse clien
 
 import asyncio
 import logging
-import multiprocessing
-from aiohttp import web
 from collections import OrderedDict
+from ..typing.hook import HookTyping2
 from ..typing.event import Event, EventType
 from ..errors import SccsException
 
@@ -74,7 +73,7 @@ class HookClient(object):
         
         async with self.lock_clients:
             if not self.accept_clients:
-                raise SccsException("watcher: can't accept new client !")
+                raise SccsException("hookclient: can't accept new client !")
 
             self.clients.append(client)
 
