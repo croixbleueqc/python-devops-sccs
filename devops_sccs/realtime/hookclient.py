@@ -29,10 +29,7 @@ from ..typing.hook import HookTyping2
 from ..typing.event import Event, EventType
 from ..errors import SccsException
 
-
-
-        
-
+#Note : this is experimental code , WIP
 class HookClient(object):
     _undef = object()
 

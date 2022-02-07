@@ -13,10 +13,8 @@
 # limitations under the License.
 
 import asyncio
-from pprint import pformat
 import re
 import logging
-from sys import version
 import time
 
 from fastapi import Request 
@@ -78,7 +76,7 @@ class BitbucketCloud(Sccs):
         """
         Initialise all the nessesary paths for hooks.
         """
-        @app_sccs.post("/hooks/repo")
+        @app_sccs.post(f"{PLUGIN_NAME}/hooks/repo")
         async def __handle_Hooks_Repo(request:Request):
             logging.debug("__handle_Hooks_Repo request")
             event = HookEvent(request.headers["X-Event-Key"])
