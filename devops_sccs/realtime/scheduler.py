@@ -24,6 +24,7 @@ Managing Watchers, subscription, unsubscribtion...
 import asyncio
 import logging
 from .watcher import Watcher
+from .hookclient import HookClient
 
 class Scheduler(object):
     def __init__(self):
@@ -74,6 +75,52 @@ class Scheduler(object):
             async with self.lock_tasks:
                 if w.is_no_watcher():
                     logging.debug(f"scheduler: remove watcher {wid}")
+                    self.tasks.pop(wid)
+    
+    async def hook(self, identity: tuple, filtering=lambda event: True, **kwargs):
+        """
+        Run a new task or connect to an existing task
+        """
+        wid = hash(identity)
+        logging.debug(f"wid: {wid}")
+
+        # Protect task creation
+        async with self.lock_tasks:
+            w = self.tasks.get(wid)
+            if w is None:
+                logging.debug(f"scheduler: creating a new hook for {wid}")
+                w = HookClient(wid, **kwargs)
+                self.tasks[wid] = w
+
+        try:
+            # Create client, connect to the watcher and read events
+
+            client = asyncio.Queue()
+
+            await w.subscribe(client)
+
+            while True:
+                event = await client.get()
+                client.task_done()
+
+                if isinstance(event, HookClient.CloseClientOnException):
+                    raise event.get_exception()
+
+                if filtering(event):
+                    yield event
+        except asyncio.CancelledError:
+            logging.debug("cancelled")
+        finally:
+            # disconnect from the watcher
+            try:
+                await w.unsubscribe(client)
+            except asyncio.CancelledError:
+                pass
+
+            # Protect task update
+            async with self.lock_tasks:
+                if w.is_no_hooked():
+                    logging.debug(f"scheduler: remove hook {wid}")
                     self.tasks.pop(wid)
 
     def notify(self, identity: tuple):

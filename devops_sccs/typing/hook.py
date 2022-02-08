@@ -1,4 +1,4 @@
-# Copyright 2020-2022 Croix Bleue du Québec
+# Copyright 2022 Croix Bleue du Québec
 
 # This file is part of python-devops-sccs.
 
@@ -15,14 +15,16 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Typing2
+from typing_engine.typing import Field
+from . import HookTyping2
 
-class WatcherTyping2(Typing2):
-    def __init__(self, key, data=None, parent=None):
-        self.key = key
-        Typing2.__init__(self, data=data, parent=parent)
+class Hook(HookTyping2):
+    name = Field()
+    event = Field()
 
-class HookTyping2(Typing2):
-    def __init__(self, key, data=None, parent=None):
-        self.key = key
-        Typing2.__init__(self, data=data, parent=parent)
+    def __eq__(self, other):
+        if not isinstance(other, Hook):
+            return False
+
+        return self.name == other.name
+

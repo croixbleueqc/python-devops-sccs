@@ -1,4 +1,4 @@
-# Copyright 2020-2021 Croix Bleue du Québec
+# Copyright 2020-2022 Croix Bleue du Québec
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,14 +13,19 @@
 # limitations under the License.
 
 import asyncio
+import re
 import logging
 import time
 
+from fastapi import Request 
 from contextlib import asynccontextmanager
 from aiobitbucket.bitbucket import Bitbucket
 from aiobitbucket.typing.refs import Branch
 from aiobitbucket.apis.repositories.repository import RepoSlug
 from aiobitbucket.errors import NetworkNotFound
+from aiobitbucket.typing.repositories.commit_status import State as commit_status_state
+from aiobitbucket.typing.webhooks.webhook import Event as HookEvent , event_t as HookEvent_t
+from ..realtime.hookserver import app_sccs
 from ..plugin import Sccs
 from ..errors import SccsException
 from ..accesscontrol import AccessForbidden, Actions, Permissions
@@ -42,7 +47,7 @@ class BitbucketCloud(Sccs):
 
         self.cache_local_sessions={}
         self.lock_cache_local_sessions = asyncio.Lock()
-
+        
         self.team = args["team"]
 
         self.cd_environments = args["continous_deployment"]["environments"]
@@ -58,6 +63,112 @@ class BitbucketCloud(Sccs):
             Actions.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE: Permissions.READ_CAPABILITIES,
             Actions.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE: Permissions.READ_CAPABILITIES
         }
+        
+        self.cache ={}
+        
+        self.cache["repo"]=core.hookServer.create_cache(self.get_repository,'repository',session=None)
+        self.cache["environementConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository')
+        self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository')
+        self.cache["available"]=core.hookServer.create_cache(self._fetch_continuous_deployment_versions_available,'repository')
+        self.__routing_init()
+
+    def __routing_init(self): 
+        """
+        Initialise all the nessesary paths for hooks.
+        """
+        @app_sccs.post(f"{PLUGIN_NAME}/hooks/repo")
+        async def __handle_Hooks_Repo(request:Request):
+            logging.debug("__handle_Hooks_Repo request")
+            event = HookEvent(request.headers["X-Event-Key"])
+            responseJson =await request.json()
+            UUID = responseJson["repository"]["full_name"]
+            if event == HookEvent_t.REPO_DELETED :
+                self.__handle_delete_repo(UUID)
+            else:
+               
+                Workspace = responseJson["repository"]["workspace"]["slug"]
+                
+                self.cache["repo"][UUID] = RepoSlug(None,workspace_name=Workspace,repo_slug_name= responseJson["repository"]["name"],data=responseJson["repository"])
+
+                if event == HookEvent_t.REPO_PUSH :
+                    self.__handle_push(UUID,responseJson)
+
+                elif event == HookEvent_t.REPO_COMMIT_STATUS_CREATED or event == HookEvent_t.REPO_COMMIT_STATUS_UPDATED :
+                    self.__handle_commit_status (UUID,event,responseJson)
+                
+        return __handle_Hooks_Repo
+
+    def __handle_delete_repo(self,UUID):
+        logging.debug("__handle_delete_repo")
+        for key in self.cache:
+                    if UUID in self.cache[key] :
+                        del self.cache[key][UUID]
+
+    async def __handle_push(self,UUID,responseJson):
+        logging.debug("__handle_push")
+        for change in responseJson["changes"]:
+            if change["created"] == True:
+                try:
+                    newName = change["new"]["name"]
+                    index = self.cd_branches_accepted.index(newName)
+                    env = typing_cd.EnvironmentConfig(hash((UUID, newName)))
+                    env.environment = self.cd_environments[index]["name"]
+                    i = 0
+                    async for b in await self.cache["environementConfig"][UUID]:
+                        index_b = self.cd_branches_accepted.index(b.name)
+                        if index_b < index :
+                            i+=1
+                        elif index_b == index:
+                            break
+                        else:
+                            self.cache["environementConfig"][UUID].insert(i,env)
+                            break
+                except ValueError:
+                    pass
+        
+    async def __handle_commit_status(self,UUID,event,response_json):
+
+        if(response_json["commit_status"]["refname"] in self.cd_versions_available):
+            
+            curr_status_state = response_json["commit_status"]["state"]
+
+            #get the build number
+            build_nb = re.search("/(\d+)$",response_json["commit_status"]["url"]).group(1)
+
+            if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
+                evn = self._create_continuous_deployment_config_by_branch(response_json["repository"]["name"],build_nb,response_json["commit_status"]["refname"],self.cd_environments[self.cd_branches_accepted.index(response_json["commit_status"]["refname"])])
+
+
+            if(curr_status_state == commit_status_state.SUCCESSFUL):
+                #add it to the cache
+                local_available = await self.cache["available"][UUID]
+
+                i = 0
+                for conf in local_available:
+                    if conf.build > build_nb :
+                        i+=1
+                    elif conf.build == build_nb:
+                        break
+                    else:
+                        version = response_json["commit_status"]["commit"]["hash"]
+                
+                        available = typing_cd.Available(hash((UUID,build_nb)))
+                        available.build = build_nb
+                        available.version = version
+
+                        local_available.insert(i,available)
+                        break
+                #todo : send an event for success
+
+                self.cache["available"][UUID] = local_available
+
+            elif(curr_status_state == commit_status_state.FAILED or commit_status_state.STOPPED):
+                #todo : send an event for failure/stopped
+                pass
+
+            elif(curr_status_state == commit_status_state.INPROGRESS):
+                #todo : send an event for in progress
+                pass 
 
     async def cleanup(self):
         await self.watcher.close_session()
@@ -191,7 +302,21 @@ class BitbucketCloud(Sccs):
 
             return repo
 
-    async def _get_continuous_deployment_config_by_branch(self, repository: str, repo: RepoSlug, branch: Branch, config: dict) -> typing_cd.EnvironmentConfig:
+    def _create_continuous_deployment_config_by_branch(self, repository: str,version: str,branch: str, config: dict,pullrequest:str=None)->typing_cd.EnvironmentConfig:
+        """
+        Helper function to standarise the creation of EnvironementConfig
+        """
+        env = typing_cd.EnvironmentConfig(hash((repository, branch)))
+        env.version = version
+        env.environment = config["name"]
+        trigger_config = config.get("trigger", {})
+        env.readonly = not trigger_config.get("enabled", True)
+        if trigger_config.get("pullrequest", False):
+            # Continuous Deployment is done with a PR.
+            env.pullrequest = pullrequest
+        return env
+
+    async def _get_continuous_deployment_config_by_branch(self, repository: str, repo: RepoSlug, branch: Branch, config: dict) ->  tuple[str,typing_cd.EnvironmentConfig]:
         """
         Get environment configuration for a specific branch
         """
@@ -206,23 +331,21 @@ class BitbucketCloud(Sccs):
         else:
             raise NotImplementedError()
 
-        env = typing_cd.EnvironmentConfig(hash((repository, branch.name)))
-        env.version = version
-        env.environment = config["name"]
-
         trigger_config = config.get("trigger", {})
-        env.readonly = not trigger_config.get("enabled", True)
-
+        pullrequest_link = None
         if trigger_config.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
             async for pullrequest in repo.pullrequests().get():
                 if pullrequest.destination.branch.name == config["branch"] and self.cd_pullrequest_tag in pullrequest.title:
-                    env.pullrequest = pullrequest.links.html.href
+                    pullrequest_link = pullrequest.links.html.href
                     break
 
-        return env
+        return (branch.name,self._create_continuous_deployment_config_by_branch(repository,version,branch.name,config,pullrequest_link))
 
-    async def get_continuous_deployment_config(self, session, repository, environments=None, args=None):
+    async def _fetch_continuous_deployment_config(self, repository,session=None,environments=None):
+        """
+        fetch the continous deployment config from the bitbucket servers
+        """    
         deploys = []
 
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
@@ -257,13 +380,31 @@ class BitbucketCloud(Sccs):
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        response = []
+        response = {}
         for result in results:
-            response.append(result)
+            response[result[0]]=result[1]
 
         return response
 
-    async def get_continuous_deployment_environments_available(self, session, repository, args) -> list:
+    async def get_continuous_deployment_config(self, session, repository, environments=None, args=None):
+        results = []
+        if session is not None:
+            #This is not a watcher session.
+            results = await self._fetch_continuous_deployment_config(repository,session,environments).values()
+        else :
+            #Fetch in the cache
+            TempDict = await self.cache["continuousDeploymentConfig"][repository]
+            if environments is not None :
+                for env in environments:
+                    results.append(TempDict[env])
+            else:
+                results = TempDict.values()
+        return results  
+
+    async def _fetch_continuous_deployment_environments_available(self, repository,session=None) -> list:
+        """
+        fetch the available environements for the specified repository.
+        """
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             repo = bitbucket.repositories.repo_slug(self.team, repository)
 
@@ -284,7 +425,13 @@ class BitbucketCloud(Sccs):
 
             return response
 
-    async def get_continuous_deployment_versions_available(self, session, repository, args) -> list:
+    async def get_continuous_deployment_environments_available(self, session, repository, args) -> list:
+            """See plugin.py"""
+            if session != None :
+               return await self._fetch_continuous_deployment_environments_available(repository,session)
+            return await self.cache["environementConfig"][repository]
+
+    async def _fetch_continuous_deployment_versions_available(self, repository, session=None) -> list:
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             # commits available to be deployed
             repo = bitbucket.repositories.repo_slug(self.team, repository)
@@ -293,7 +440,7 @@ class BitbucketCloud(Sccs):
 
             async for pipeline in repo.pipelines().get(filter='sort=-created_on'):
                 if pipeline.target.ref_name in self.cd_versions_available and \
-                    pipeline.state.result.name == "SUCCESSFUL":
+                    pipeline.state.result.name == commit_status_state.SUCCESSFUL:
 
                     available = typing_cd.Available(hash((repository, pipeline.build_number)))
                     available.build = pipeline.build_number
@@ -301,6 +448,11 @@ class BitbucketCloud(Sccs):
                     response.append(available)
 
             return response
+
+    async def get_continuous_deployment_versions_available(self, session, repository, args) -> list:
+        if(session is not None):
+            return self._fetch_continuous_deployment_versions_available(repository,session)
+        return await self.cache["available"][repository]
 
     async def trigger_continuous_deployment(self, session, repository, environment, version, args) -> typing_cd.EnvironmentConfig:
         """see plugin.py"""
@@ -370,3 +522,13 @@ class BitbucketCloud(Sccs):
 
             # Return the new configuration (new version or PR in progress)
             return continuous_deployment
+        
+    async def get_hooks_repository(self,session,repository,args):
+        """see plugin.py"""
+        async with self.bitbucket_session(session) as bitbucket:
+            permission = await bitbucket.webhooks.get_by_repertory_name(self.team + "/" + repository)
+            repo = typing_repo.Repository(hash(permission.repository.name))
+            repo.name = permission.repository.name
+            repo.permission = permission.permission
+
+            return repo

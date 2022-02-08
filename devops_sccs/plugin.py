@@ -10,7 +10,7 @@ IMPORTANT: If you consider that some features are enough generic and can help ot
 """
 
 # Copyright 2019 mickybart
-# Copyright 2020 Croix Bleue du Québec
+# Copyright 2020-2022 Croix Bleue du Québec
 
 # This file is part of python-devops-sccs.
 
@@ -43,7 +43,7 @@ class Sccs(object):
     Abstract class to create a plugin
     """
 
-    async def init(self, core, args):
+    async def init(self, core,args):
         """
         Initialize the plugin
 
@@ -56,8 +56,8 @@ class Sccs(object):
           this is where you can store those informations to use them when required
         
         Args:
-            core(Core): Core library
-            args(dict): static configuration for the plugin
+            core(Core)    : Core library
+            args(dict)    : static configuration for the plugin
         """
         raise NotImplementedError()
 
@@ -352,3 +352,22 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
+    async def get_hooks_repository(self,session,repository,args):
+        """Check if a repository is compliant
+
+        No remediation should be done by default if a repository is not compliant.
+        A remediation can failed if manual intervention is required.
+        An optional report can be send back to the requester
+
+        The report should be cached/stored to be provided in an efficient way with compliance_report_repository
+
+        Args:
+            session(object): the session
+            repository(str): the repository name
+            remediation(bool): force a remediation
+            report(bool): send a report (avoid to call compliance_report_repository)
+            args(dict): extr arguments to handle the operation
+
+        Returns:
+            dict|None: an optional report
+        """
