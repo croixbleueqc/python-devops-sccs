@@ -22,18 +22,28 @@ Define standard typing to manage continuous deployment
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 from typing_engine.typing import Field
+from enum import Enum
 from . import WatcherTyping2
+
+class BuildStatusType(Enum):
+    SUCCESSFUL = "SUCCESSFUL"
+    FAILED ="FAILED"
+    INPROGRESS = "INPROGRESS"
+    def __str__(self):
+        return self.value
 
 class EnvironmentConfig(WatcherTyping2):
     """
     Defines which version is deployed on a specific environment.
     
     readonly field permit to know if we can trigger a continuous deployment for this environment
+    
     """
     environment = Field()
     version = Field()
     readonly = Field(instanciator=bool, default=False)
     pullrequest = Field()
+    
 
     def __eq__(self, other):
         if not isinstance(other, EnvironmentConfig):
@@ -58,6 +68,7 @@ class Available(WatcherTyping2):
     """
     build = Field()
     version = Field()
+    _buildstatus = Field(instanciator=BuildStatusType).converter(dumps=str).mapping("buildstatus")
 
     def __eq__(self, other):
         if not isinstance(other, Available):

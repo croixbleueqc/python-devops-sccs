@@ -15,32 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from asyncio import Lock,Condition
-from contextlib import asynccontextmanager
 import logging
-
-class RW_Lock (object):
-    def __init__(self):
-       self._read_ready = Condition(Lock())
-       self._readers = 0
-
-    @asynccontextmanager
-    async def read(self):
-        async with self._read_ready:
-            self._readers +=1
-        try :        
-            yield
-        finally:
-            async with self._read_ready:
-                self._readers -= 1
-                if self._readers == 0:
-                    self._read_ready.notify_all()
-
-    @asynccontextmanager
-    async def write(self):
-        async with self._read_ready as WLock:
-            await self._read_ready.wait_for(lambda : self._readers == 0)
-            yield
         
 class AsyncCache(object):
     
@@ -52,7 +27,6 @@ class AsyncCache(object):
         kwargs_func         arguments to call with lookup_func
         """
 
-        self.lockCache = RW_Lock()
         self.data = data
 
         #setup lookup function
@@ -64,27 +38,24 @@ class AsyncCache(object):
         return self.data.get(key)
 
     async def __getitem__(self, key):
-        val = None
-        try :
-            #async with self.lockCache.read() as RLock:
-                val = self.data[key]
-                logging.debug(u"retrived {val} in the cache at location {key}")
-        except KeyError as e:
-            logging.debug(u"element {key} not found in the cache! populating it!")
-            if self.lookup_func is None:
-                raise e
-            else:
-               # async with self.lockCache.write() as WLock:
-                    self.kwargs[self.key_arg] = key
-                    val = await self.lookup_func(**self.kwargs)
-                    self.data[key]=val
+        val = self.data.get(key)
+        if(val is not None):
+            logging.debug(f"retrived {val} in the cache at location {key}")
+
+        elif self.lookup_func is not None:
+        
+            logging.debug(f"element {key} not found in the cache! populating it!")
+            self.kwargs[self.key_arg] = key
+            val = await self.lookup_func(**self.kwargs)
+            logging.debug(f"chaching {val} to {key}")
+            self.data[key]=val
+        
+        else :
+        
+            raise KeyError(key)
                     
         return val
 
     def __setitem__(self, key, item) :
-            logging.debug(u"assign {item} to {key}")
+            logging.debug(f"assign {item} to {key}")
             self.data[key]=item
-        
-    def __del__(self):
-        if(self.current_task is not None):
-            self.current_task.result()
