@@ -31,13 +31,11 @@ class HookServer:
                 cust_logger.error("hook server shut down")
 
         loop = asyncio.new_event_loop()
-        self.manager.start()
         self.threadedServer = threading.Thread(target = fn, args = (loop, ))  
         self.threadedServer.start()
 
     def stop_server(self):
         self.lifespan = 'off'
-        self.manager.shutdown()
         self.threadedServer.join(5.0)
         if(self.threadedServer.is_alive()):
             cust_logger.error("hook server is still running ! ")
