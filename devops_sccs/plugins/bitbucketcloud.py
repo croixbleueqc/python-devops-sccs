@@ -299,7 +299,6 @@ class BitbucketCloud(Sccs):
         """
         Helper function to standarise the creation of EnvironementConfig
         """
-        logging.debug("_create_continuous_deployment_config_by_branch")
         env = typing_cd.EnvironmentConfig(hash((repository, branch)))
         env.version = version
         env.environment = config["name"]
@@ -386,11 +385,9 @@ class BitbucketCloud(Sccs):
         if session is not None:
             #This is not a watcher session.
             results = await self._fetch_continuous_deployment_config(repository,session,environments)
-            logging.debug(f"get_continuous_deployment_config TempDict = {results}")
         else :
             #Fetch in the cache
             TempDict = await self.cache["continuousDeploymentConfig"][repository]
-            logging.debug(f"get_continuous_deployment_config TempDict = {TempDict}")
             if environments is not None :
                 for env in environments:
                     results.append(TempDict[env])

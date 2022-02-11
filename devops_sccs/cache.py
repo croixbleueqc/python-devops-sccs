@@ -39,20 +39,18 @@ class AsyncCache(object):
 
     async def __getitem__(self, key):
         val = self.data.get(key)
-        if(val is not None):
-            logging.debug(f"retrived {val} in the cache at location {key}")
-
-        elif self.lookup_func is not None:
+        if(val is None):
         
-            logging.debug(f"element {key} not found in the cache! populating it!")
-            self.kwargs[self.key_arg] = key
-            val = await self.lookup_func(**self.kwargs)
-            logging.debug(f"chaching {val} to {key}")
-            self.data[key]=val
+            if self.lookup_func is not None:
         
-        else :
+                logging.debug(f"element {key} not found in the cache! populating it!")
+                self.kwargs[self.key_arg] = key
+                val = await self.lookup_func(**self.kwargs)
+                self.data[key]=val
         
-            raise KeyError(key)
+            else :
+        
+                raise KeyError(key)
                     
         return val
 
