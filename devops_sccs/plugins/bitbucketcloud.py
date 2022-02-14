@@ -76,7 +76,7 @@ class BitbucketCloud(Sccs):
         """
         Initialise all the nessesary paths for hooks.
         """
-        @app_sccs.post(f"{PLUGIN_NAME}/hooks/repo")
+        @app_sccs.post(f"/{PLUGIN_NAME}/hooks/repo")
         async def __handle_Hooks_Repo(request:Request):
             logging.debug("__handle_Hooks_Repo request")
             event = HookEvent(request.headers["X-Event-Key"])
