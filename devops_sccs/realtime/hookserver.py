@@ -34,14 +34,9 @@ class HookServer:
         self.threadedServer = threading.Thread(target = fn, args = (loop, ))  
         self.threadedServer.start()
 
-    def stop_server(self):
+    async def stop_server(self):
         self.lifespan = 'off'
-        self.threadedServer.join(5.0)
-        if(self.threadedServer.is_alive()):
-            cust_logger.error("hook server is still running ! ")
-            
-        
-        
+        self.threadedServer.join()        
     
     def create_cache(self , lookup_func = None,key_arg = None , **kwargs_func):
         return AsyncCache(lookup_func,key_arg,self.manager.dict(),**kwargs_func)

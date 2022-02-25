@@ -57,7 +57,7 @@ class BitbucketCloud(Sccs):
         
         self.watcher = Bitbucket()
         self.watcher.open_basic_session(args["watcher"]["user"], args["watcher"]["pwd"])
-
+        
         self.accesscontrol_rules = {
             Actions.WATCH_CONTINOUS_DEPLOYMENT_CONFIG: Permissions.READ_CAPABILITIES,
             Actions.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE: Permissions.READ_CAPABILITIES,
@@ -76,13 +76,17 @@ class BitbucketCloud(Sccs):
         """
         Initialise all the nessesary paths for hooks.
         """
+        cust_logger = logging.getLogger("aiohttp.access") 
+
         @app_sccs.post(f"/{PLUGIN_NAME}/hooks/repo")
         async def __handle_Hooks_Repo(request:Request):
-            logging.debug("__handle_Hooks_Repo request")
+            cust_logger.debug("__handle_Hooks_Repo request")
             event = HookEvent(request.headers["X-Event-Key"])
             responseJson =await request.json()
             UUID = responseJson["repository"]["full_name"]
+           
             if event == HookEvent_t.REPO_DELETED :
+                cust_logger.debug("__handle_delete_Repo")
                 self.__handle_delete_repo(UUID)
             else:
                
@@ -91,21 +95,21 @@ class BitbucketCloud(Sccs):
                 self.cache["repo"][UUID] = RepoSlug(None,workspace_name=Workspace,repo_slug_name= responseJson["repository"]["name"],data=responseJson["repository"])
 
                 if event == HookEvent_t.REPO_PUSH :
+                    cust_logger.debug("__handle_push_Repo")
                     self.__handle_push(UUID,responseJson)
 
                 elif event == HookEvent_t.REPO_COMMIT_STATUS_CREATED or event == HookEvent_t.REPO_COMMIT_STATUS_UPDATED :
+                    cust_logger.debug("__handle_commit_status")
                     self.__handle_commit_status (UUID,event,responseJson)
                 
         return __handle_Hooks_Repo
 
     def __handle_delete_repo(self,UUID):
-        logging.debug("__handle_delete_repo")
         for key in self.cache:
                     if UUID in self.cache[key] :
                         del self.cache[key][UUID]
 
     async def __handle_push(self,UUID,responseJson):
-        logging.debug("__handle_push")
         for change in responseJson["changes"]:
             if change["created"] == True:
                 try:
@@ -113,7 +117,7 @@ class BitbucketCloud(Sccs):
                     index = self.cd_branches_accepted.index(newName)
                     env = typing_cd.EnvironmentConfig(hash((UUID, newName)))
                     env.environment = self.cd_environments[index]["name"]
-                    env.buildstatus = str(commit_status_state.INPROGRESS)
+                    env.buildstatus = str(commit_status_state.INPROGRESS if (newName == "master") else commit_status_state.SUCCESSFUL )
                     i = 0
                     async for b in await self.cache["environementConfig"][UUID]:
                         index_b = self.cd_branches_accepted.index(b.name)
@@ -160,8 +164,6 @@ class BitbucketCloud(Sccs):
                         break
             
                 self.cache["available"][UUID] = local_available
-
-            
 
     async def cleanup(self):
         await self.watcher.close_session()
@@ -340,7 +342,7 @@ class BitbucketCloud(Sccs):
         fetch the continous deployment config from the bitbucket servers
         """    
         deploys = []
-
+        
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             repo = bitbucket.repositories.repo_slug(self.team, repository)
 
@@ -377,7 +379,7 @@ class BitbucketCloud(Sccs):
         for result in results:
             response[result[0]]=result[1]
         
-        logging.debug(f"_fetch_continuous_deployment_config responce = {response}")
+        logging.debug(f"_fetch_continuous_deployment_config responce")
         return response
 
     async def get_continuous_deployment_config(self, session, repository, environments=None, args=None):
@@ -389,8 +391,9 @@ class BitbucketCloud(Sccs):
             #Fetch in the cache
             TempDict = await self.cache["continuousDeploymentConfig"][repository]
             if environments is not None :
-                for env in environments:
-                    results.append(TempDict[env])
+                for branch in TempDict:
+                    if TempDict[branch].environment in environments:
+                        results.append(TempDict[branch])
             else:
                 results = [val for val in TempDict.values()]
         return results  
@@ -451,8 +454,10 @@ class BitbucketCloud(Sccs):
 
     async def trigger_continuous_deployment(self, session, repository, environment, version, args) -> typing_cd.EnvironmentConfig:
         """see plugin.py"""
-
+        
         logging.debug(f"trigger for {repository} on {environment}")
+
+        #logging.debug(f"session = {session}" )
 
         # Get Continuous Deployment configuration for the environment requested
         cd_environment_config = None
@@ -462,11 +467,13 @@ class BitbucketCloud(Sccs):
                 break
         if cd_environment_config is None:
             utils_cd.trigger_not_supported(repository, environment)
-
+        
+        #logging.debug(f"cd_environment_config = {cd_environment_config}")
+        
         async with self.bitbucket_session(session) as bitbucket:
             # Check all configurations
-            continuous_deployment = (await self.get_continuous_deployment_config(session, repository, environments=[environment]))[0]
-            versions_available = await self.get_continuous_deployment_versions_available(session, repository, args)
+            continuous_deployment = (await self.get_continuous_deployment_config(None, repository, environments=[environment]))[0]
+            versions_available = await self.get_continuous_deployment_versions_available(None, repository, args)
             utils_cd.trigger_prepare(continuous_deployment, versions_available, repository, environment, version)
 
             # Check if we need/can do a PR
@@ -514,6 +521,8 @@ class BitbucketCloud(Sccs):
             else:
                 # Continuous Deployment done
                 continuous_deployment.version = version
+            
+            self.cache["continuousDeploymentConfig"][repository][deploy_branch] = continuous_deployment
 
             # Return the new configuration (new version or PR in progress)
             return continuous_deployment

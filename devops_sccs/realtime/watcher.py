@@ -4,7 +4,7 @@ Watcher module
 Provide a way to poll an API and to stream results as events (ADD, MODIFY, DELETE)
 """
 
-# Copyright 2021 Croix Bleue du Québec
+# Copyright 2021-2022 Croix Bleue du Québec
 
 # This file is part of python-devops-sccs.
 
@@ -65,7 +65,7 @@ class Watcher(object):
         """
         Force a refresh (notify the watch to refresh as soon as possible)
         """
-        logging.info(f"watcher: refresh for {self.wid}")
+        #logging.info(f"watcher: refresh for {self.wid}")
         self.event_poll.set()
 
     async def subscribe(self, client: asyncio.Queue):
@@ -155,7 +155,7 @@ class Watcher(object):
                         event = Event()
                         event.type_ = EventType.MODIFIED
                     else:
-                        logging.info("identical !")
+                        #logging.info("identical !")
                         continue
 
                     event.value = value
