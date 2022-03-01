@@ -55,5 +55,5 @@ class AsyncCache(object):
         return val
 
     def __setitem__(self, key, item) :
-            logging.debug(f"assign {item} to {key}")
+            logging.debug(f"key {key} has been set!")
             self.data[key]=item
