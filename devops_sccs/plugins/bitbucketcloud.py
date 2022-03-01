@@ -119,6 +119,7 @@ class BitbucketCloud(Sccs):
                     env.environment = self.cd_environments[index]["name"]
                     env.buildstatus = str(commit_status_state.INPROGRESS if (newName == "master") else commit_status_state.SUCCESSFUL )
                     i = 0
+                    #! race condition here !
                     async for b in await self.cache["environementConfig"][UUID]:
                         index_b = self.cd_branches_accepted.index(b.name)
                         if index_b < index :
@@ -132,7 +133,9 @@ class BitbucketCloud(Sccs):
                     pass
         
     async def __handle_commit_status(self,UUID,event,response_json):
-
+        """
+        This hook is only called on the Master branch for handling compilation events  
+        """
         if(response_json["commit_status"]["refname"] in self.cd_versions_available):
             
             curr_status_state = response_json["commit_status"]["state"]
@@ -470,9 +473,11 @@ class BitbucketCloud(Sccs):
         
         #logging.debug(f"cd_environment_config = {cd_environment_config}")
         
+        #using user session for repo manipulations
         async with self.bitbucket_session(session) as bitbucket:
-            # Check all configurations
+            # Check current configuration using the cache. This is ok because the user will see that deployed version anyway
             continuous_deployment = (await self.get_continuous_deployment_config(None, repository, environments=[environment]))[0]
+            #
             versions_available = await self.get_continuous_deployment_versions_available(None, repository, args)
             utils_cd.trigger_prepare(continuous_deployment, versions_available, repository, environment, version)
 
@@ -507,7 +512,7 @@ class BitbucketCloud(Sccs):
                 session["user"]["author"],
                 branch if deploy_branch is None else deploy_branch.name
             )
-
+            
             if deploy_branch is not None:
                 # Continuous Deployment is done with a PR.
                 pr = repo.pullrequests().new()
@@ -515,14 +520,17 @@ class BitbucketCloud(Sccs):
                 pr.close_source_branch = True
                 pr.source.branch.name = deploy_branch.name
                 pr.destination.branch.name = branch
+                
+                #race condition start here 
                 await pr.create()
                 await pr.get()
                 continuous_deployment.pullrequest = pr.links.html.href
             else:
                 # Continuous Deployment done
                 continuous_deployment.version = version
-            
-            self.cache["continuousDeploymentConfig"][repository][deploy_branch] = continuous_deployment
+
+            #race condition finish after that statement.
+            (await self.cache["continuousDeploymentConfig"][repository])[deploy_branch] = continuous_deployment
 
             # Return the new configuration (new version or PR in progress)
             return continuous_deployment

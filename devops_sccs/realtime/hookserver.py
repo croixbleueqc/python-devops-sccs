@@ -20,22 +20,24 @@ class HookServer:
         self.port = settings['port']
         self.lifespan = 'on'
         self.manager = Manager()
+        self.loop = asyncio.new_event_loop()
 
     def start_server(self):
-        logging.debug([{"path": route.path, "name": route.name} for route in app_sccs.routes])
+        #logging.debug([{"path": route.path, "name": route.name} for route in app_sccs.routes])
         def fn(loop):
             asyncio.set_event_loop(loop)
             try:
                 uvicorn.run(app_sccs, host = self.host, port = self.port, access_log = True, lifespan = self.lifespan)
             except RuntimeError as s:
                 cust_logger.error("hook server shut down")
-
-        loop = asyncio.new_event_loop()
-        self.threadedServer = threading.Thread(target = fn, args = (loop, ))  
+        
+        self.threadedServer = threading.Thread(target = fn, args = (self.loop, ))  
         self.threadedServer.start()
 
-    async def stop_server(self):
+    def stop_server(self):
         self.lifespan = 'off'
+        self.loop.stop()
+        self.loop.close()
         self.threadedServer.join()        
     
     def create_cache(self , lookup_func = None,key_arg = None , **kwargs_func):
