@@ -121,15 +121,17 @@ class BitbucketCloud(Sccs):
                     env.buildstatus = str(commit_status_state.INPROGRESS if (newName == "master") else commit_status_state.SUCCESSFUL )
                     i = 0
                     #! race condition here !
-                    async for b in await self.cache["environementConfig"][UUID]:
-                        index_b = self.cd_branches_accepted.index(b.name)
-                        if index_b < index :
-                            i+=1
-                        elif index_b == index:
-                            break
-                        else:
-                            self.cache["environementConfig"][UUID].insert(i,env)
-                            break
+                    with self.cache as cache:
+                        async for b in await cache["environementConfig"][UUID]:
+                            index_b = self.cd_branches_accepted.index(b.name)
+                            if index_b < index :
+                                i+=1
+                            elif index_b == index:
+                                cache["environementConfig"][UUID][i]=env
+                                break
+                            else:
+                                cache["environementConfig"][UUID].insert(i,env)
+                                break
                 except ValueError:
                     pass
         
@@ -514,24 +516,25 @@ class BitbucketCloud(Sccs):
                 branch if deploy_branch is None else deploy_branch.name
             )
             
-            if deploy_branch is not None:
-                # Continuous Deployment is done with a PR.
-                pr = repo.pullrequests().new()
-                pr.title = f"Ugrade {environment} {self.cd_pullrequest_tag}"
-                pr.close_source_branch = True
-                pr.source.branch.name = deploy_branch.name
-                pr.destination.branch.name = branch
-                
-                #race condition start here 
-                await pr.create()
-                await pr.get()
-                continuous_deployment.pullrequest = pr.links.html.href
-            else:
-                # Continuous Deployment done
-                continuous_deployment.version = version
+            with self.cache["continuousDeploymentConfig"] as cache :
+                if deploy_branch is not None:
+                    # Continuous Deployment is done with a PR.
+                    pr = repo.pullrequests().new()
+                    pr.title = f"Ugrade {environment} {self.cd_pullrequest_tag}"
+                    pr.close_source_branch = True
+                    pr.source.branch.name = deploy_branch.name
+                    pr.destination.branch.name = branch
+                    
+                    #race condition start here 
+                    await pr.create()
+                    await pr.get()
+                    continuous_deployment.pullrequest = pr.links.html.href
+                else:
+                    # Continuous Deployment done
+                    continuous_deployment.version = version
 
-            #race condition finish after that statement.
-            (await self.cache["continuousDeploymentConfig"][repository])[deploy_branch] = continuous_deployment
+                #race condition finish after that statement.
+                cache[deploy_branch] = continuous_deployment
 
             # Return the new configuration (new version or PR in progress)
             return continuous_deployment

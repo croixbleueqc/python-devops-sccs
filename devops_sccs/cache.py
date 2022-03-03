@@ -19,10 +19,11 @@ import logging
         
 class AsyncCache(object):
     
-    def __init__ (self ,lookup_func=None,key_arg=None, data:dict = {} , **kwargs_func):
+    def __init__ (self ,lookup_func=None,key_arg=None,rlock =None ,data:dict = {}, **kwargs_func):
         """
         loopup_func:async   callable  function to call when a key is not found in the cache
         key_arg:string      name of the key argument 
+        rlock:Rlock         recursive lock for writing (needs a context manager)
         data:dict           initial data of the cache
         kwargs_func         arguments to call with lookup_func
         """
@@ -33,6 +34,7 @@ class AsyncCache(object):
         self.lookup_func = lookup_func
         self.key_arg = key_arg
         self.kwargs =  kwargs_func
+        self.rlock = rlock 
 
     def get(self,key):
         return self.data.get(key)
@@ -42,11 +44,15 @@ class AsyncCache(object):
         if(val is None):
         
             if self.lookup_func is not None:
-        
-                logging.debug(f"element {key} not found in the cache! populating it!")
-                self.kwargs[self.key_arg] = key
-                val = await self.lookup_func(**self.kwargs)
-                self.data[key]=val
+                with self.rlock as lock:
+                    #check if the data is still unitialized
+                    val = self.data.get(key)                    
+                    if (val is None) :
+                        #data is definetly unitialized
+                        logging.debug(f"element {key} not found in the cache! populating it!")
+                        self.kwargs[self.key_arg] = key
+                        val = await self.lookup_func(**self.kwargs)
+                        self.data[key]=val
         
             else :
         
@@ -55,5 +61,12 @@ class AsyncCache(object):
         return val
 
     def __setitem__(self, key, item) :
+        with self.rlock as lock :
             logging.debug(f"key {key} has been set!")
             self.data[key]=item
+    
+    def __enter__(self):
+        self.rlock.acquire()
+    
+    def __exit__(self,type, value, traceback):
+        self.rlock.release()
