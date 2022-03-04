@@ -41,4 +41,4 @@ class HookServer:
         self.threadedServer.join()        
     
     def create_cache(self , lookup_func = None,key_arg = None , **kwargs_func):
-        return AsyncCache(lookup_func,key_arg,self.manager.dict(),**kwargs_func)
+        return AsyncCache(lookup_func,key_arg,self.manager.RLock(),self.manager.dict(),**kwargs_func)
