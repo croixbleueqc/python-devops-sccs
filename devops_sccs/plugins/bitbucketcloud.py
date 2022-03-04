@@ -536,6 +536,9 @@ class BitbucketCloud(Sccs):
                 #race condition finish after that statement.
                 cache[deploy_branch] = continuous_deployment
 
+            #race condition finish after that statement.
+            (await self.cache["continuousDeploymentConfig"][repository])[deploy_branch] = continuous_deployment
+
             # Return the new configuration (new version or PR in progress)
             return continuous_deployment
         
