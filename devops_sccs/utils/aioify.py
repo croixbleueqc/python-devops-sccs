@@ -34,6 +34,11 @@ def getCoreAioify(config=None):
 
     return _coreaioify
 
+def cleanupCoreAiofy(poolName):
+    global _coreaioify
+    _coreaioify.cleanup(poolName)
+    _coreaioify=None
+
 def aioify(pool=None):
     def aioify_decorator(func):
         @wraps(func)
@@ -64,3 +69,6 @@ class CoreAioify(object):
 
     def get_executor(self, pool_name):
         return self.executor_pools[pool_name]
+
+    def cleanup(self, pool_name):
+        self.executor_pools[pool_name].shutdown(wait=True, cancel_futures=True)

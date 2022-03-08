@@ -1,0 +1,7 @@
+coverage
+asynctest
+mock
+json
+unittest
+requests
+pytest

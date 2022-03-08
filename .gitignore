@@ -32,4 +32,7 @@ secrets.json
 example.py
 run.py
 secret
-plugins_tests/
+
+# tests
+/tests/*.json
+.venv*

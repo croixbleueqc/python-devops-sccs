@@ -5,7 +5,7 @@ import logging
 import asyncio
 from ..cache import AsyncCache
 from fastapi import FastAPI
-
+import time
 # sccs fast api server entrypoint
 app_sccs = FastAPI()
 
@@ -38,7 +38,7 @@ class HookServer:
         self.lifespan = 'off'
         self.loop.stop()
         self.loop.close()
-        self.threadedServer.join()        
+        self.threadedServer.join(timeout=0)
     
     def create_cache(self , lookup_func = None,key_arg = None , **kwargs_func):
         return AsyncCache(lookup_func,key_arg,self.manager.RLock(),self.manager.dict(),**kwargs_func)

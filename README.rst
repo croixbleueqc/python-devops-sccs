@@ -457,3 +457,15 @@ Use the new plugin
     print(await ctx_bc_1.get_repositories())
 
     await core.delete_context(ctx_bc_1)
+
+Unit test
+^^^^^^^^^^^^^^^^^^
+
+python -m venv .venv
+source .venv/bin/activate
+
+pip install -r requirement.txt
+
+coverage run -m unittest discover -s tests -p "*_test.py"
+
+python tests/bitbucketcloud_test.py TestBitbucketCloud.test6_fetch_continuous_deployment_config_should_return_branch_available
