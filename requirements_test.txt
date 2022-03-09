@@ -1,7 +1,11 @@
 coverage
 asynctest
 mock
-json
-unittest
-requests
 pytest
+fastapi
+httpx
+uvicorn
+pygit2
+git+https://github.com/croixbleueqc/python-typing-engine@3f71bd9b30e688e28a00e3be5e2ff22a63058124
+git+https://github.com/croixbleueqc/python-aiobitbucket@ebd1fda0cea4e2efa306cc65ca0797c17ca383c9
+git+https://github.com/croixbleueqc/python-devops-kubernetes@c724ea4f11fd4838ce0040cd2db946634fb38379
