@@ -119,6 +119,7 @@ class BitbucketCloud(Sccs):
                     env = typing_cd.EnvironmentConfig(hash((UUID, newName)))
                     env.environment = self.cd_environments[index]["name"]
                     env.buildstatus = str(commit_status_state.INPROGRESS if (newName == "master") else commit_status_state.SUCCESSFUL )
+                    
                     i = 0
                     repoName=responseJson["repository"]["name"]
 

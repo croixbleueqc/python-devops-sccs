@@ -20,6 +20,7 @@ from devops_sccs.core import Core as SccsCore
 from aiobitbucket.bitbucket import Bitbucket
 from httpx import AsyncClient
 from fastapi import Request 
+from devops_sccs.typing import cd as typing_cd
 from aiobitbucket.typing.webhooks.webhook import event_t as HookEvent_t
 
 class AsyncIterator:
@@ -42,6 +43,15 @@ def getMockRepo(name):
     result.permission='admin'
     result.repository=Mock()
     result.repository.name=name
+    return result
+
+def getMockEnvironmentConfig(environment,version="qwerty123456",readonly=False,pullrequest="foo.bar/pr/123456789qwerty"):
+    result = Mock(spec=typing_cd.EnvironmentConfig)
+    result.environment = environment
+    result.version = version
+    result.readonly = readonly
+    result.pullrequest = pullrequest
+    result.buildstatus = "SUCCESSFUL"
     return result
 
 class TestBitbucketCloud(asynctest.TestCase):
@@ -169,31 +179,45 @@ class TestBitbucketCloud(asynctest.TestCase):
         path="/bitbucketcloud/hooks/repo"
         headers={"X-Event-Key": "repo:push"}
         push_payload = {
-            'actor': 'marcouxm',
+            'actor': 'JonhSmith',
             'repository': {
                 "type": "repository",
-                "full_name": "croixbleue/aiobitbucket-wip",
-                "workspace": {"slug":"croixbleue"},
-                "name":"aiobitbucket-wip"
+                "full_name": "foo/bar",
+                "workspace": {"slug":"foo"},
+                "name":"bar"
             },
             "push": {
                 "changes": [
                     {
                         "created":True,
                         "new":{
-                            "name":"deploy/dev"
+                            "name":"deploy/dev",
+                            "target":{
+                                "message": "deploy version zz1u18tc9up1qwmhr1qq5pk6hh1utl7pckkb1g56"
+                            }
                         }
                     }
                 ]
             }
         }
 
-        #Test
-        async with AsyncClient(app=app_sccs) as client:
-            response = await client.post(path,headers=headers,json=push_payload)
+        testEnvConfig = getMockEnvironmentConfig("deploy/dev","f00bar")
+        testDict = {
+            "bar" : {
+                "deploy/dev" : {
+                    testEnvConfig
+                }
+            }
+        }        
+        with patch.dict(self.bitbucketPlugin.cache["environementConfig"],testDict,clear=False):
+            #Test
+            async with AsyncClient(app=app_sccs) as client:
+                response = await client.post(path,headers=headers,json=push_payload)
 
-        #Assert
-            self.assertTrue(response.status_code == 200)
-
+            #Assert
+                environementConfigResults = self.bitbucketPlugin.cache["environementConfig"].get()
+                self.assertTrue(response.status_code == 200)
+                self.assertTrue(environementConfigResults is not None)
+                
 if __name__ == '__main__':
     unittest.main()

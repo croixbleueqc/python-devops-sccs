@@ -70,3 +70,9 @@ class AsyncCache(object):
     
     def __exit__(self,type, value, traceback):
         self.rlock.release()
+
+    def copy(self):
+        return AsyncCache(self.lookup_func,self.key_arg,self.rlock,self.data.copy(),kwargs_func= self.kwargs)
+    
+    def update(self,values):
+        self.data.update(values)
