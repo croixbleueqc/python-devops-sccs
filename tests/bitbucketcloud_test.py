@@ -197,3 +197,22 @@ class TestBitbucketCloud(asynctest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# Next tests to be created in priority
+
+    # async def testX_Given_get_continuous_deployment_config_When_another_user_get_same_repo_Then_data_should_be_get_from_cache(self):
+    
+    # async def testX_Given_get_continuous_deployment_config_When_handle_push_deploydev_Then_data_should_be_get_updated_in_cache(self):
+
+    # async def testX_Given_new_merge_in_master_When_hook_handle_commit_status_Then_cache_version_avalaible_with_new_version(self):
+
+    # async dev testX_Given_repo_exist_When_hook_delete_repo_Then_repo_is_deleted_from_cache(self):
+
+    # async dev testX_When_trigger_continuous_deployment_with_X_condition_Then_new_pull_request_is_created(self):
+
+    # async def testX_Given_fetch_continuous_deployment_config_When_another_user_get_same_repo_after_cache_expire_Then_data_should_be_fetch_from_bitbucket(self):
+
+    # async def testX_Given_custom_hook_call_When_cache_is_corrupted_Then_cache_is_cleared(self):  
+        # TBD : hook delete repo could be used ?
+        
