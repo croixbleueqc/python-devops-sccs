@@ -14,12 +14,12 @@
 
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
-
+from multiprocessing import managers
 import logging
         
 class AsyncCache(object):
     
-    def __init__ (self ,lookup_func=None,key_arg=None,rlock =None ,data:dict = {}, **kwargs_func):
+    def __init__ (self ,data:managers.BaseProxy ,lookup_func=None,key_arg=None,rlock =None , **kwargs_func):
         """
         loopup_func:async   callable  function to call when a key is not found in the cache
         key_arg:string      name of the key argument 
@@ -33,7 +33,7 @@ class AsyncCache(object):
         #setup lookup function
         self.lookup_func = lookup_func
         self.key_arg = key_arg
-        self.kwargs =  kwargs_func
+        self.kwargs_func =  kwargs_func
         self.rlock = rlock 
 
     def get(self,key):
@@ -50,8 +50,8 @@ class AsyncCache(object):
                     if (val is None) :
                         #data is definetly unitialized
                         logging.debug(f"element {key} not found in the cache! populating it!")
-                        self.kwargs[self.key_arg] = key
-                        val = await self.lookup_func(**self.kwargs)
+                        self.kwargs_func[self.key_arg] = key
+                        val = await self.lookup_func(**self.kwargs_func)
                         self.data[key]=val
         
             else :
@@ -70,9 +70,3 @@ class AsyncCache(object):
     
     def __exit__(self,type, value, traceback):
         self.rlock.release()
-
-    def copy(self):
-        return AsyncCache(self.lookup_func,self.key_arg,self.rlock,self.data.copy(),kwargs_func= self.kwargs)
-    
-    def update(self,values):
-        self.data.update(values)

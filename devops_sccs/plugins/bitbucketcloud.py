@@ -69,8 +69,8 @@ class BitbucketCloud(Sccs):
 
         if hasattr(core, 'hookServer'):
             self.cache["repo"]=core.hookServer.create_cache(self.get_repository,'repository',session=None)
-            self.cache["environementConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository')
-            self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository')
+            self.cache["environementConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
+            self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository',session=self.watcher)
             self.cache["available"]=core.hookServer.create_cache(self._fetch_continuous_deployment_versions_available,'repository')
             self.__routing_init()
 
@@ -86,7 +86,7 @@ class BitbucketCloud(Sccs):
             cust_logger.debug("__handle_Hooks_Repo request")
             event = HookEvent_t(request.headers["X-Event-Key"])
             responseJson = await request.json()
-            UUID = responseJson["repository"]["full_name"]
+            UUID = responseJson["repository"]["name"]
             
             if event == HookEvent_t.REPO_DELETED :
                 cust_logger.debug("__handle_delete_Repo")
@@ -111,29 +111,26 @@ class BitbucketCloud(Sccs):
                         del self.cache[key][UUID]
 
     async def __handle_push(self,UUID,responseJson):
+        triggerContinuousDeploymentPattern = re.compile(r'^deploy version ([0-9a-fA-F]+)$')
+        
         for change in responseJson["push"]["changes"]:
-            if change["created"] == True:
+            versionMatch = re.match(triggerContinuousDeploymentPattern,change["new"]["target"]["message"])
+            if versionMatch:
                 try:
                     newName = change["new"]["name"]
                     index = self.cd_branches_accepted.index(newName)
                     env = typing_cd.EnvironmentConfig(hash((UUID, newName)))
                     env.environment = self.cd_environments[index]["name"]
                     env.buildstatus = str(commit_status_state.INPROGRESS if (newName == "master") else commit_status_state.SUCCESSFUL )
-                    
-                    i = 0
-                    repoName=responseJson["repository"]["name"]
+                    env.version = versionMatch.group(1)
 
                     #! race condition here !
-                    for b in await self.cache["environementConfig"][repoName]:
-                        index_b = self.cd_branches_accepted.index(b.environment)
-                        if index_b < index :
-                            i+=1
-                        elif index_b == index:
-                            self.cache["environementConfig"][repoName][i]=env
-                            break
-                        else:
-                            self.cache["environementConfig"][repoName].insert(i,env)
-                            break
+                    with self.cache["environementConfig"] :
+                        
+                        tempDict = await self.cache["environementConfig"][UUID]
+                        tempDict[newName]= env
+                        self.cache["environementConfig"][UUID] = tempDict
+
                 except ValueError:
                     pass
         
@@ -354,7 +351,6 @@ class BitbucketCloud(Sccs):
         fetch the continous deployment config from the bitbucket servers
         """    
         deploys = []
-
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             repo = bitbucket.repositories.repo_slug(self.team, repository)
             
@@ -414,6 +410,7 @@ class BitbucketCloud(Sccs):
         """
         fetch the available environements for the specified repository.
         """
+        
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             repo = bitbucket.repositories.repo_slug(self.team, repository)
 

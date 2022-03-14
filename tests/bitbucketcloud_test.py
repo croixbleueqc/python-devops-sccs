@@ -19,6 +19,7 @@ from devops_sccs.realtime.hookserver import app_sccs, HookServer
 from devops_sccs.core import Core as SccsCore
 from aiobitbucket.bitbucket import Bitbucket
 from httpx import AsyncClient
+from fastapi.testclient import TestClient
 from fastapi import Request 
 from devops_sccs.typing import cd as typing_cd
 from aiobitbucket.typing.webhooks.webhook import event_t as HookEvent_t
@@ -73,6 +74,8 @@ class TestBitbucketCloud(asynctest.TestCase):
         self.args['user']=privateArgs['user']
         self.args['apikey']=privateArgs['apikey']
         self.args["author"]=privateArgs['author']
+        self.args["watcher"]["user"] = privateArgs['user']
+        self.args["watcher"]["pwd"] = privateArgs['apikey']
 
         plugin=init_plugin()
 
@@ -162,7 +165,7 @@ class TestBitbucketCloud(asynctest.TestCase):
         # Todo : mock repository and branches used
 
         #Test
-        result=await self.bitbucketPlugin._fetch_continuous_deployment_config('aiobitbucket-wip')
+        result=await self.bitbucketPlugin._fetch_continuous_deployment_config(**{'repository':'aiobitbucket-wip'})
 
         #Assert
         self.assertTrue(result['master'] is not None)
@@ -179,12 +182,12 @@ class TestBitbucketCloud(asynctest.TestCase):
         path="/bitbucketcloud/hooks/repo"
         headers={"X-Event-Key": "repo:push"}
         push_payload = {
-            'actor': 'JonhSmith',
+            'actor': 'dargisr',
             'repository': {
                 "type": "repository",
-                "full_name": "foo/bar",
-                "workspace": {"slug":"foo"},
-                "name":"bar"
+                "full_name": 'croixbleue/aiobitbucket-wip',
+                "workspace": {"slug":"croixbleue"},
+                "name":'aiobitbucket-wip'
             },
             "push": {
                 "changes": [
@@ -193,7 +196,7 @@ class TestBitbucketCloud(asynctest.TestCase):
                         "new":{
                             "name":"deploy/dev",
                             "target":{
-                                "message": "deploy version zz1u18tc9up1qwmhr1qq5pk6hh1utl7pckkb1g56"
+                                "message": "deploy version beeff00d"
                             }
                         }
                     }
@@ -201,23 +204,16 @@ class TestBitbucketCloud(asynctest.TestCase):
             }
         }
 
-        testEnvConfig = getMockEnvironmentConfig("deploy/dev","f00bar")
-        testDict = {
-            "bar" : {
-                "deploy/dev" : {
-                    testEnvConfig
-                }
-            }
-        }        
-        with patch.dict(self.bitbucketPlugin.cache["environementConfig"],testDict,clear=False):
-            #Test
-            async with AsyncClient(app=app_sccs) as client:
-                response = await client.post(path,headers=headers,json=push_payload)
+ 
+        
+        #Test
+        async with AsyncClient(app=app_sccs) as client:
+            response = await client.post(path,headers=headers,json=push_payload)
 
-            #Assert
-                environementConfigResults = self.bitbucketPlugin.cache["environementConfig"].get()
-                self.assertTrue(response.status_code == 200)
-                self.assertTrue(environementConfigResults is not None)
+        #Assert
+            #environementConfigResults = await self.bitbucketPlugin.cache["environementConfig"]["aiobitbucket-wip"]["deploy/dev"]
+            self.assertTrue(response.status_code == 200)
+            #self.assertTrue(environementConfigResults is not None)
                 
 if __name__ == '__main__':
     unittest.main()
