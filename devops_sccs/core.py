@@ -88,8 +88,11 @@ class Core(object):
         return self
 
     async def cleanup(self):
+        if self.provision is not None:
+            self.provision.cleanup()
+
         if self.enableHook :
-           self.hookServer.stop_server()
+            self.hookServer.stop_server()
 
         for plugin_id in list(self.plugins.keys()):
             await self.unregister(plugin_id)

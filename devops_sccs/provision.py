@@ -41,7 +41,7 @@ import logging
 
 from .errors import AnswerRequired, AnswerValidatorFailure, AuthorSyntax
 
-from .utils.aioify import aioify, getCoreAioify
+from .utils.aioify import aioify, getCoreAioify, cleanupCoreAiofy
 
 class Provision(object):
     POOL="provision"
@@ -55,6 +55,9 @@ class Provision(object):
         self.templates_contract_cache = self.generate_contract_templates()
         
         getCoreAioify().create_thread_pool(self.POOL, max_workers=max_workers)
+
+    def cleanup(self):
+        cleanupCoreAiofy(self.POOL)
 
     def create_git_credential(self, user, pub, key, author):
         return GitCredential(user, pub, key, author)
