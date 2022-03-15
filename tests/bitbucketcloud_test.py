@@ -165,7 +165,7 @@ class TestBitbucketCloud(asynctest.TestCase):
         # Todo : mock repository and branches used
 
         #Test
-        result=await self.bitbucketPlugin._fetch_continuous_deployment_config(**{'repository':'aiobitbucket-wip'})
+        result=await self.bitbucketPlugin._fetch_continuous_deployment_config(**{'repository':'repo-name'})
 
         #Assert
         self.assertTrue(result['master'] is not None)
@@ -182,12 +182,12 @@ class TestBitbucketCloud(asynctest.TestCase):
         path="/bitbucketcloud/hooks/repo"
         headers={"X-Event-Key": "repo:push"}
         push_payload = {
-            'actor': 'dargisr',
+            'actor': 'smithj',
             'repository': {
                 "type": "repository",
-                "full_name": 'croixbleue/aiobitbucket-wip',
-                "workspace": {"slug":"croixbleue"},
-                "name":'aiobitbucket-wip'
+                "full_name": 'company-name/repo-name',
+                "workspace": {"slug":"company-name"},
+                "name":'repo-name'
             },
             "push": {
                 "changes": [
@@ -204,7 +204,6 @@ class TestBitbucketCloud(asynctest.TestCase):
             }
         }
 
- 
         
         #Test
         async with AsyncClient(app=app_sccs) as client:
@@ -214,7 +213,18 @@ class TestBitbucketCloud(asynctest.TestCase):
             #environementConfigResults = await self.bitbucketPlugin.cache["environementConfig"]["aiobitbucket-wip"]["deploy/dev"]
             self.assertTrue(response.status_code == 200)
             #self.assertTrue(environementConfigResults is not None)
-                
+
+    @mock.patch('devops_sccs.plugins.bitbucketcloud.Bitbucket')
+    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
+    async def test8_Given_get_continuous_deployment_config_When_another_user_get_same_repo_Then_data_should_be_get_from_cache(self,mock_uvicorn, mock_bitbucket):  
+        self.core = await SccsCore.create(self.config)
+        await self.bitbucketPlugin.init(self.core, self.args)
+        
+        sessionId=self.bitbucketPlugin.get_session_id(self.args)
+        await self.bitbucketPlugin.open_session(sessionId, self.args)
+        session=self.bitbucketPlugin.get_session(sessionId)
+        
+        
 if __name__ == '__main__':
     unittest.main()
 
