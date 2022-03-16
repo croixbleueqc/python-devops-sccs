@@ -26,7 +26,7 @@ class HookServer:
         
 
     def start_server(self):
-        print([{"path": route.path, "name": route.name} for route in app_sccs.routes])
+        #print([{"path": route.path, "name": route.name} for route in app_sccs.routes])
         def fn(loop):
             asyncio.set_event_loop(loop)
             try:

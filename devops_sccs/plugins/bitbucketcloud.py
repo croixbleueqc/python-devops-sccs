@@ -69,8 +69,8 @@ class BitbucketCloud(Sccs):
 
         if hasattr(core, 'hookServer'):
             self.cache["repo"]=core.hookServer.create_cache(self.get_repository,'repository',session=None)
-            self.cache["environementConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
-            self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository',session=self.watcher)
+            self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
+            self.cache["continuousDeploymentConfigAvailable"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository',session=self.watcher)
             self.cache["available"]=core.hookServer.create_cache(self._fetch_continuous_deployment_versions_available,'repository')
             self.__routing_init()
 
@@ -125,11 +125,11 @@ class BitbucketCloud(Sccs):
                     env.version = versionMatch.group(1)
 
                     #! race condition here !
-                    with self.cache["environementConfig"] :
+                    with self.cache["continuousDeploymentConfig"] :
                         
-                        tempDict = await self.cache["environementConfig"][UUID]
+                        tempDict = await self.cache["continuousDeploymentConfig"][UUID]
                         tempDict[newName]= env
-                        self.cache["environementConfig"][UUID] = tempDict
+                        self.cache["continuousDeploymentConfig"][UUID] = tempDict
 
                 except ValueError:
                     pass
@@ -234,11 +234,15 @@ class BitbucketCloud(Sccs):
 
     @asynccontextmanager
     async def bitbucket_session(self, session, default_session=None):
+        
+        if isinstance(session,type(Bitbucket)):
+            yield session 
+            return
+        
         # Use default session if session is not provided (mainly used for watch requests with prior accesscontrol calls)
         if session is None:
             yield default_session
             return
-
         # Regular flow
         bitbucket = Bitbucket()
         try:
@@ -387,23 +391,22 @@ class BitbucketCloud(Sccs):
         for result in results:
             response[result[0]]=result[1]
         
-        logging.debug(f"_fetch_continuous_deployment_config responce")
+        logging.info(f"_fetch_continuous_deployment_config responce")
         return response
 
     async def get_continuous_deployment_config(self, session, repository, environments=None, args=None):
         results = []
-        if session is not None:
-            #This is not a watcher session.
-            results = await self._fetch_continuous_deployment_config(repository,session,environments)
-        else :
-            #Fetch in the cache
-            TempDict = await self.cache["continuousDeploymentConfig"][repository]
-            if environments is not None :
-                for branch in TempDict:
-                    if TempDict[branch].environment in environments:
-                        results.append(TempDict[branch])
-            else:
-                results = [val for val in TempDict.values()]
+        #Fetch in the cache
+       
+        TempDict = await self.cache["continuousDeploymentConfig"][repository]
+        val = await self._fetch_continuous_deployment_config(repository,session)
+        
+        if environments is not None :
+            for branch in TempDict:
+                if TempDict[branch].environment in environments:
+                    results.append(TempDict[branch])
+        else:
+            results = [val for val in TempDict.values()]
         return results  
 
     async def _fetch_continuous_deployment_environments_available(self, repository,session=None) -> list:

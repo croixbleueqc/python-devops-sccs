@@ -1,3 +1,4 @@
+import copy
 import unittest
 import json
 import asynctest
@@ -65,8 +66,7 @@ class TestBitbucketCloud(asynctest.TestCase):
             self.args = json.load(f)
 
         with open('tests/private_config.json', 'r') as f:
-            privateArgs = json.load(f)
-
+            privateArgs = json.load(f)     
         # self.args['user']="test_user"
         # self.args['apikey']="abcd"
         # self.args["author"]="test user <test.user@company.com>"
@@ -86,6 +86,20 @@ class TestBitbucketCloud(asynctest.TestCase):
         await self.bitbucketPlugin.cleanup()
         if self.core is not None:
             await self.core.cleanup()
+
+    async def getSession2(self):
+        
+        with open('tests/private_config.json', 'r') as f:
+            privateArgs = json.load(f)
+        
+        self.args['user']=privateArgs['user']
+        self.args['apikey']=privateArgs['apikey2']
+        self.args["author"]=privateArgs['author']
+
+        sessionId=self.bitbucketPlugin.get_session_id(self.args)
+        await self.bitbucketPlugin.open_session(sessionId, self.args)
+        session=self.bitbucketPlugin.get_session(sessionId)
+        return session
 
     async def test1_plugin_init(self):
         #Arrange
@@ -137,6 +151,7 @@ class TestBitbucketCloud(asynctest.TestCase):
         #Arrange
         self.core = await SccsCore.create(self.config)
         await self.bitbucketPlugin.init(self.core, self.args)
+        
         sessionId=self.bitbucketPlugin.get_session_id(self.args)
         await self.bitbucketPlugin.open_session(sessionId, self.args)
         session=self.bitbucketPlugin.get_session(sessionId)
@@ -164,8 +179,8 @@ class TestBitbucketCloud(asynctest.TestCase):
         await self.bitbucketPlugin.init(self.core, self.args)
         # Todo : mock repository and branches used
 
-        #Test
-        result=await self.bitbucketPlugin._fetch_continuous_deployment_config(**{'repository':'repo-name'})
+        #Test 
+        result=await self.bitbucketPlugin._fetch_continuous_deployment_config(**{'repository':self.args['test_repo']["name"]})
 
         #Assert
         self.assertTrue(result['master'] is not None)
@@ -179,15 +194,19 @@ class TestBitbucketCloud(asynctest.TestCase):
         self.core = await SccsCore.create(self.config)
         await self.bitbucketPlugin.init(self.core, self.args)
 
+        testRepo = self.args['test_repo']["name"]
+        testTeam = self.args['test_repo']["team"]
+
+
         path="/bitbucketcloud/hooks/repo"
         headers={"X-Event-Key": "repo:push"}
         push_payload = {
             'actor': 'smithj',
             'repository': {
                 "type": "repository",
-                "full_name": 'company-name/repo-name',
-                "workspace": {"slug":"company-name"},
-                "name":'repo-name'
+                "full_name": f'{testTeam}/{testRepo}',
+                "workspace": {"slug":f"{testTeam}"},
+                "name":f'{testRepo}'
             },
             "push": {
                 "changes": [
@@ -196,7 +215,7 @@ class TestBitbucketCloud(asynctest.TestCase):
                         "new":{
                             "name":"deploy/dev",
                             "target":{
-                                "message": "deploy version beeff00d"
+                                "message": "deploy version f00ddeadbeeff00d"
                             }
                         }
                     }
@@ -214,9 +233,9 @@ class TestBitbucketCloud(asynctest.TestCase):
             self.assertTrue(response.status_code == 200)
             #self.assertTrue(environementConfigResults is not None)
 
-    @mock.patch('devops_sccs.plugins.bitbucketcloud.Bitbucket')
+    #@mock.patch('devops_sccs.plugins.bitbucketcloud.Bitbucket')
     @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
-    async def test8_Given_get_continuous_deployment_config_When_another_user_get_same_repo_Then_data_should_be_get_from_cache(self,mock_uvicorn, mock_bitbucket):  
+    async def test8_Given_get_continuous_deployment_config_When_another_user_get_same_repo_Then_data_should_be_get_from_cache(self,mock_uvicorn):  
         self.core = await SccsCore.create(self.config)
         await self.bitbucketPlugin.init(self.core, self.args)
         
@@ -224,7 +243,25 @@ class TestBitbucketCloud(asynctest.TestCase):
         await self.bitbucketPlugin.open_session(sessionId, self.args)
         session=self.bitbucketPlugin.get_session(sessionId)
         
+        session2=await self.getSession2()
+
+        testRepo = self.args['test_repo']['name']
+
+        original = await self.bitbucketPlugin.get_continuous_deployment_config(session,testRepo)
         
+        import pdb;pdb.set_trace()
+        edited = copy.copy(original)
+
+        edited[0].version = "deadf00dbeef"
+
+        self.bitbucketPlugin.cache['continuousDeploymentConfig'][testRepo] = edited 
+        result = await self.bitbucketPlugin.get_continuous_deployment_config(session2,testRepo)
+
+        print(result[0])
+        print(edited[0])
+        
+        self.assertTrue(result['master']==edited['master'])
+
 if __name__ == '__main__':
     unittest.main()
 
