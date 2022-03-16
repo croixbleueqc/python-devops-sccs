@@ -399,14 +399,12 @@ class BitbucketCloud(Sccs):
         #Fetch in the cache
        
         TempDict = await self.cache["continuousDeploymentConfig"][repository]
-        val = await self._fetch_continuous_deployment_config(repository,session)
-        
         if environments is not None :
             for branch in TempDict:
                 if TempDict[branch].environment in environments:
                     results.append(TempDict[branch])
         else:
-            results = [val for val in TempDict.values()]
+            results = TempDict
         return results  
 
     async def _fetch_continuous_deployment_environments_available(self, repository,session=None) -> list:
@@ -435,10 +433,7 @@ class BitbucketCloud(Sccs):
             return response
 
     async def get_continuous_deployment_environments_available(self, session, repository, args) -> list:
-            """See plugin.py"""
-            if session is not None :
-               return await self._fetch_continuous_deployment_environments_available(repository,session)
-            return await self.cache["environementConfig"][repository]
+            return await self.cache["continuousDeploymentConfigAvailable"][repository]
 
     async def _fetch_continuous_deployment_versions_available(self, repository, session=None) -> list:
         async with self.bitbucket_session(session, self.watcher) as bitbucket:

@@ -251,14 +251,11 @@ class TestBitbucketCloud(asynctest.TestCase):
         
         import pdb;pdb.set_trace()
         edited = copy.copy(original)
-
-        edited[0].version = "deadf00dbeef"
+        
+        edited['master'].version = "deadf00dbeef"
 
         self.bitbucketPlugin.cache['continuousDeploymentConfig'][testRepo] = edited 
         result = await self.bitbucketPlugin.get_continuous_deployment_config(session2,testRepo)
-
-        print(result[0])
-        print(edited[0])
         
         self.assertTrue(result['master']==edited['master'])
 
