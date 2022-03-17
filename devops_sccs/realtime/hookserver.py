@@ -1,7 +1,6 @@
 import multiprocessing
 import uvicorn
 from multiprocessing import Manager
-from multiprocessing.managers import SyncManager
 import threading
 import logging
 import asyncio
@@ -23,6 +22,7 @@ class HookServer:
         self.lifespan = 'on'
         self.manager = Manager()
         self.loop = asyncio.new_event_loop()
+        self.routingFunctions = []
         
 
     def start_server(self):
@@ -43,5 +43,8 @@ class HookServer:
         self.loop.close()
         self.threadedServer.join(timeout=0)
     
+    def create_dict(self):
+        return self.manager.dict()
+
     def create_cache(self , lookup_func = None,key_arg = None , **kwargs_func):
         return AsyncCache(self.manager.dict(),lookup_func,key_arg,self.manager.RLock(),**kwargs_func)

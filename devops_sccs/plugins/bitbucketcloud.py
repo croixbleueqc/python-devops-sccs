@@ -65,9 +65,10 @@ class BitbucketCloud(Sccs):
             Actions.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE: Permissions.READ_CAPABILITIES
         }
         
-        self.cache ={}
+        
 
         if hasattr(core, 'hookServer'):
+            self.cache = core.hookServer.create_dict()
             self.cache["repo"]=core.hookServer.create_cache(self.get_repository,'repository',session=None)
             self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
             self.cache["continuousDeploymentConfigAvailable"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository',session=self.watcher)
@@ -123,7 +124,7 @@ class BitbucketCloud(Sccs):
                     env.environment = self.cd_environments[index]["name"]
                     env.buildstatus = str(commit_status_state.INPROGRESS if (newName == "master") else commit_status_state.SUCCESSFUL )
                     env.version = versionMatch.group(1)
-
+                    #import pdb; pdb.set_trace()
                     #! race condition here !
                     with self.cache["continuousDeploymentConfig"] :
                         
