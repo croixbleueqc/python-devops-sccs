@@ -223,14 +223,14 @@ class TestBitbucketCloud(asynctest.TestCase):
             }
         }
 
-        environementConfigPre = await self.bitbucketPlugin.cache_continuousDeploymentConfig[testRepo]
+        environementConfigPre = await self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo]
         #Test
         async with AsyncClient(app=app_sccs,base_url="http://devops-console") as client:
             response = await client.post(path,headers=headers,json=push_payload)
 
         #Assert
             #import pdb; pdb.set_trace()
-            environementConfigResults = self.bitbucketPlugin.cache_continuousDeploymentConfig.get(testRepo)
+            environementConfigResults = self.bitbucketPlugin.cache["continuousDeploymentConfig"].get(testRepo)
             self.assertTrue(response.status_code == 200)
             self.assertTrue(environementConfigResults is not None)
 
@@ -254,7 +254,7 @@ class TestBitbucketCloud(asynctest.TestCase):
         
         edited['master'].version = "deadf00dbeef"
 
-        self.bitbucketPlugin.cache_continuousDeploymentConfig[testRepo] = edited 
+        self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo] = edited 
         result = await self.bitbucketPlugin.get_continuous_deployment_config(session2,testRepo)
         
         self.assertTrue(result['master']==edited['master'])
@@ -295,18 +295,18 @@ class TestBitbucketCloud(asynctest.TestCase):
             }
         }
 
-        environementConfigResults = await self.bitbucketPlugin.cache_continuousDeploymentConfig[testRepo]
+       # environementConfigResults = await self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo]
         #Test
         async with AsyncClient(app=app_sccs,base_url="http://devops-console") as client:
             response = await client.post(path,headers=headers,json=push_payload)
 
         #Assert
            
-            environementConfigResults = self.bitbucketPlugin.cache_continuousDeploymentConfig.get(testRepo)
+            environementConfigResults = self.bitbucketPlugin.cache["continuousDeploymentConfig"].get(testRepo)
             self.assertTrue(response.status_code == 200)
             self.assertTrue(environementConfigResults is not None)
             #import pdb; pdb.set_trace()
-            self.assertTrue(environementConfigResults["deploy/dev"].version == version)
+            self.assertEqual(environementConfigResults["deploy/dev"].version , version)
 
 if __name__ == '__main__':
     unittest.main()

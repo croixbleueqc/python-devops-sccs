@@ -66,10 +66,7 @@ class AsyncCache(object):
             logging.debug(f"key {key} has been set!")
             self.data[key]=item
     
-    def __getstate__(self):
-        state = copy.deepcopy(self.__dict__)
-        import pdb; pdb.set_trace()
-        return state
+
 
     def __enter__(self):
         self.rlock.acquire()

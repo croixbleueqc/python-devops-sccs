@@ -69,9 +69,10 @@ class BitbucketCloud(Sccs):
 
         if hasattr(core, 'hookServer'):
             self.cache = core.hookServer.create_dict()
+            self.cache = {}
             self.cache["repo"]=core.hookServer.create_cache(self.get_repository,'repository',session=None)
             self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
-            self.cache["continuousDeploymentConfigAvailable"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository',session=self.watcher)
+            self.cache["continuousDeploymentConfigAvailable"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
             self.cache["available"]=core.hookServer.create_cache(self._fetch_continuous_deployment_versions_available,'repository')
             self.__routing_init()
 
@@ -396,17 +397,18 @@ class BitbucketCloud(Sccs):
         return response
 
     async def get_continuous_deployment_config(self, session, repository, environments=None, args=None):
-        results = []
+        return await  self._fetch_continuous_deployment_config(session,repository,environments)
+        #results = []
         #Fetch in the cache
        
-        TempDict = await self.cache["continuousDeploymentConfig"][repository]
-        if environments is not None :
-            for branch in TempDict:
-                if TempDict[branch].environment in environments:
-                    results.append(TempDict[branch])
-        else:
-            results = TempDict
-        return results  
+        #TempDict = await self.cache["continuousDeploymentConfig"][repository]
+        #if environments is not None :
+        #    for branch in TempDict:
+        #        if TempDict[branch].environment in environments:
+        #            results.append(TempDict[branch])
+        #else:
+        #    results = TempDict
+        #return results  
 
     async def _fetch_continuous_deployment_environments_available(self, repository,session=None) -> list:
         """
@@ -434,7 +436,7 @@ class BitbucketCloud(Sccs):
             return response
 
     async def get_continuous_deployment_environments_available(self, session, repository, args) -> list:
-            return await self.cache["continuousDeploymentConfigAvailable"][repository]
+            return await self._fetch_continuous_deployment_environments_available(session,repository,args)#self.cache["continuousDeploymentConfigAvailable"][repository]
 
     async def _fetch_continuous_deployment_versions_available(self, repository, session=None) -> list:
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
@@ -456,9 +458,9 @@ class BitbucketCloud(Sccs):
             return response
 
     async def get_continuous_deployment_versions_available(self, session, repository, args) -> list:
-        if(session is not None):
-            return self._fetch_continuous_deployment_versions_available(repository,session)
-        return await self.cache["available"][repository]
+        #if(session is not None):
+            return await self._fetch_continuous_deployment_versions_available(repository,session)
+        #return await self.cache["available"][repository]
 
     async def trigger_continuous_deployment(self, session, repository, environment, version, args) -> typing_cd.EnvironmentConfig:
         """see plugin.py"""
