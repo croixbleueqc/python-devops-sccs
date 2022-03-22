@@ -16,7 +16,6 @@
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 from multiprocessing import managers
 import logging
-import copy
         
 class AsyncCache(object):
     
