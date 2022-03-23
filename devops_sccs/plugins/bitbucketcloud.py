@@ -437,7 +437,7 @@ class BitbucketCloud(Sccs):
             return response
 
     async def get_continuous_deployment_environments_available(self, session, repository, args) -> list:
-            return await self._fetch_continuous_deployment_environments_available(session,repository,args)#self.cache["continuousDeploymentConfigAvailable"][repository]
+            return await self._fetch_continuous_deployment_environments_available(repository,session)#self.cache["continuousDeploymentConfigAvailable"][repository]
 
     async def _fetch_continuous_deployment_versions_available(self, repository, session=None) -> list:
         self.__log_session(session)
@@ -540,10 +540,10 @@ class BitbucketCloud(Sccs):
                     continuous_deployment.version = version
 
                 #race condition finish after that statement.
-                cache[deploy_branch] = continuous_deployment
+                #cache[deploy_branch] = continuous_deployment
 
             #race condition finish after that statement.
-            (await self.cache["continuousDeploymentConfig"][repository])[deploy_branch] = continuous_deployment
+            #(await self.cache["continuousDeploymentConfig"][repository])[deploy_branch] = continuous_deployment
 
             # Return the new configuration (new version or PR in progress)
             return continuous_deployment
