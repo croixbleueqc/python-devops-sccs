@@ -93,18 +93,18 @@ class BitbucketCloud(Sccs):
             
             if event == HookEvent_t.REPO_DELETED :
                 cust_logger.info("__handle_delete_Repo")
-                self.__handle_delete_repo(UUID)
+                #self.__handle_delete_repo(UUID)
             else:
                 Workspace = responseJson["repository"]["workspace"]["slug"]
                 
                 self.cache["repo"][UUID] = RepoSlug(None,workspace_name=Workspace,repo_slug_name= responseJson["repository"]["name"],data=responseJson["repository"])
                 if event == HookEvent_t.REPO_PUSH:
                     cust_logger.info("__handle_push_Repo")
-                    await self.__handle_push(UUID,responseJson)
+                    #await self.__handle_push(UUID,responseJson)
 
                 elif event == HookEvent_t.REPO_COMMIT_STATUS_CREATED or event == HookEvent_t.REPO_COMMIT_STATUS_UPDATED :
                     cust_logger.info("__handle_commit_status")
-                    await self.__handle_commit_status (UUID,event,responseJson)
+                    #await self.__handle_commit_status (UUID,event,responseJson)
                 
         return __handle_Hooks_Repo
 
@@ -176,7 +176,7 @@ class BitbucketCloud(Sccs):
     async def cleanup(self):
         if hasattr(self, 'watcher'):
             await self.watcher.close_session()
-
+    @staticmethod
     def get_session_id(self, args):
         """see plugin.py"""
 
@@ -559,9 +559,8 @@ class BitbucketCloud(Sccs):
             return repo
     @staticmethod
     def __log_session(session:dict):
-        cust_logger = logging.getLogger("aiohttp.access") 
         funcName = inspect.getouterframes(inspect.currentframe(), 2)[1][3] #gets the function name using the callstack
         username =  "Watcher" 
         if session is not None:#by default  None is the watcher
-            username = session['user']['user']
-        cust_logger.info(f"{username} called {funcName}")
+            username = BitbucketCloud.get_session_id(session)
+        logging.debug(f"{username} called {funcName}")
