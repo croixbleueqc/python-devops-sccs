@@ -176,8 +176,8 @@ class BitbucketCloud(Sccs):
     async def cleanup(self):
         if hasattr(self, 'watcher'):
             await self.watcher.close_session()
-    @staticmethod
-    def get_session_id(self, args):
+    
+    def get_session_id(self,args):
         """see plugin.py"""
 
         session_id = hash((args["user"], args["apikey"]))
@@ -557,10 +557,11 @@ class BitbucketCloud(Sccs):
             repo.permission = permission.permission
 
             return repo
-    @staticmethod
-    def __log_session(session:dict):
+    
+    def __log_session(self,session:dict):
+        cust_logger = logging.getLogger("aiohttp.access") 
         funcName = inspect.getouterframes(inspect.currentframe(), 2)[1][3] #gets the function name using the callstack
         username =  "Watcher" 
         if session is not None:#by default  None is the watcher
-            username = BitbucketCloud.get_session_id(session)
-        logging.debug(f"{username} called {funcName}")
+            username = session['user']['user']
+        cust_logger.info(f"{username} called {funcName}")
