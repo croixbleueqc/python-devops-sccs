@@ -10,7 +10,6 @@ import time
 # sccs fast api server entrypoint
 app_sccs = FastAPI()
 
-cust_logger = logging.getLogger("aiohttp.access") 
 
 class HookServer:
     """
@@ -19,32 +18,25 @@ class HookServer:
     def __init__(self, settings):
         self.host = settings['host']
         self.port = settings['port']
-        self.lifespan = 'on'
         self.manager = Manager()
-        self.loop = asyncio.new_event_loop()
-        self.routingFunctions = []
         
 
     def start_server(self):
         #print([{"path": route.path, "name": route.name} for route in app_sccs.routes])
-        def fn(loop):
-            asyncio.set_event_loop(loop)
-            try:
-                uvicorn.run(app_sccs, host = self.host, port = self.port, access_log = True, lifespan = self.lifespan)
-            except RuntimeError as s:
-                cust_logger.error("hook server shut down")
-        
-        self.threadedServer = threading.Thread(target = fn, args = (self.loop, ))  
+
+        self.threadedServer = multiprocessing.Process(target = uvicorn.run, args=(app_sccs,), kwargs={'host':self.host, 'port':self.port, 'access_log':True},daemon=True)
         self.threadedServer.start()
 
     def stop_server(self):
-        self.lifespan = 'off'
-        self.loop.stop()
-        self.loop.close()
-        self.threadedServer.join(timeout=0)
+        self.threadedServer.terminate()
     
     def create_dict(self):
         return self.manager.dict()
 
     def create_cache(self , lookup_func = None,key_arg = None , **kwargs_func):
         return AsyncCache(self.manager.dict(),lookup_func,key_arg,self.manager.RLock(),**kwargs_func)
+
+    def __del__(self):
+        if hasattr(self,'threadedServer'):
+            if(self.threadedServer.is_alive()):
+                self.threadedServer.terminate()

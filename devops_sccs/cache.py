@@ -16,10 +16,11 @@
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 from multiprocessing import managers
 import logging
+import multiprocessing
         
 class AsyncCache(object):
     
-    def __init__ (self ,data:managers.BaseProxy ,lookup_func=None,key_arg=None,rlock =None , **kwargs_func):
+    def __init__ (self ,data ,lookup_func,key_arg:str=None,rlock = multiprocessing.RLock(), **kwargs_func):
         """
         loopup_func:async   callable  function to call when a key is not found in the cache
         key_arg:string      name of the key argument 
@@ -29,7 +30,6 @@ class AsyncCache(object):
         """
 
         self.data = data
-
         #setup lookup function
         self.lookup_func = lookup_func
         self.key_arg = key_arg
@@ -64,11 +64,10 @@ class AsyncCache(object):
         with self.rlock as lock :
             logging.debug(f"key {key} has been set!")
             self.data[key]=item
-    
-
 
     def __enter__(self):
         self.rlock.acquire()
     
     def __exit__(self,type, value, traceback):
         self.rlock.release()
+

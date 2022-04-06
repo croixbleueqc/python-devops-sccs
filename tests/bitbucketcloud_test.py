@@ -1,4 +1,5 @@
 import copy
+import multiprocessing
 import unittest
 import json
 import asynctest
@@ -20,10 +21,13 @@ from devops_sccs.realtime.hookserver import app_sccs
 from devops_sccs.core import Core as SccsCore
 from aiobitbucket.bitbucket import Bitbucket
 from httpx import AsyncClient
+from cachetest_server import app_test , CacheTest_Server
+from cachetest_plugina import CacheTest_PluginA
+
 from fastapi.testclient import TestClient
-from fastapi import Request 
 from devops_sccs.typing import cd as typing_cd
 from aiobitbucket.typing.webhooks.webhook import event_t as HookEvent_t
+from devops_sccs.cache import AsyncCache
 
 class AsyncIterator:
     def __init__(self, items):    
@@ -81,6 +85,8 @@ class TestBitbucketCloud(asynctest.TestCase):
 
         self.core = None
         self.bitbucketPlugin=plugin[1]
+        host = self.config['hook_server']['host'] if self.config['hook_server']['host'] != '0.0.0.0' else 'localhost'
+        self.hookPath = f"http://{host}:{self.config['hook_server']['port']}"
 
     async def tearDown(self):
         await self.bitbucketPlugin.cleanup()
@@ -108,10 +114,10 @@ class TestBitbucketCloud(asynctest.TestCase):
 
         #Assert
         self.assertEqual(plugin[0], "bitbucketcloud")
-        self.assertTrue(isinstance(plugin[1], BitbucketCloud))
+        self.assertIsInstance(plugin[1], BitbucketCloud)
 
-    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
-    async def test2_class_init_with_hookserver_should_succeed(self, mock_uvicorn):
+   
+    async def test2_class_init_with_hookserver_should_succeed(self):
         #Arrange
         self.core = await SccsCore.create(self.config)
         
@@ -130,8 +136,7 @@ class TestBitbucketCloud(asynctest.TestCase):
         #Test
         result = await self.bitbucketPlugin.init(self.core, self.args)
 
-    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
-    async def test4_multiple_open_sessions_should_be_shared(self,mock_uvicorn):
+    async def test4_multiple_open_sessions_should_be_shared(self):
         #Arrange
         self.core = await SccsCore.create(self.config)
         await self.bitbucketPlugin.init(self.core, self.args)
@@ -143,11 +148,10 @@ class TestBitbucketCloud(asynctest.TestCase):
 
         #Assert
         session=self.bitbucketPlugin.get_session(sessionId)
-        self.assertTrue(session['shared-session']==2)
+        self.assertEqual(session['shared-session'],2)
 
     @mock.patch('devops_sccs.plugins.bitbucketcloud.Bitbucket')
-    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
-    async def test5_get_bitbucket_repositories_bitbucket_session(self,mock_uvicorn, mock_bitbucket):
+    async def test5_get_bitbucket_repositories_bitbucket_session(self, mock_bitbucket):
         #Arrange
         self.core = await SccsCore.create(self.config)
         await self.bitbucketPlugin.init(self.core, self.args)
@@ -166,13 +170,13 @@ class TestBitbucketCloud(asynctest.TestCase):
         result=await self.bitbucketPlugin.get_repositories(session, self.args)
 
         #Assert
-        self.assertTrue(len(result)==2)
-        self.assertTrue(result[0].name=='helloworld')
-        self.assertTrue(result[1].name=='helloworld2')
+        self.assertEqual(len(result),2)
+        self.assertEqual(result[0].name,'helloworld')
+        self.assertEqual(result[1].name,'helloworld2')
 
     # @mock.patch('devops_sccs.plugins.bitbucketcloud.Bitbucket')
-    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
-    async def test6_fetch_continuous_deployment_config_should_return_branch_available(self,mock_uvicorn):
+
+    async def test6_fetch_continuous_deployment_config_should_return_branch_available(self):
 
         #Arrange
         self.core = await SccsCore.create(self.config)
@@ -183,13 +187,12 @@ class TestBitbucketCloud(asynctest.TestCase):
         result=await self.bitbucketPlugin._fetch_continuous_deployment_config(**{'repository':self.args['test_repo']["name"]})
 
         #Assert
-        self.assertTrue(result['master'] is not None)
-        self.assertTrue(result['deploy/dev'] is not None)
-        self.assertTrue(result['deploy/prod'] is not None)
-
-    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
+        self.assertIsNotNone(result['master'] )
+        self.assertIsNotNone(result['deploy/dev'] )
+        self.assertIsNotNone(result['deploy/prod'] )
+    
     @pytest.mark.anyio
-    async def test7_handle_push_from_bitbucket(self, mock_uvicorn):
+    async def test7_handle_push_from_bitbucket(self):
         #Arrange
         self.core = await SccsCore.create(self.config)
         await self.bitbucketPlugin.init(self.core, self.args)
@@ -223,20 +226,19 @@ class TestBitbucketCloud(asynctest.TestCase):
             }
         }
 
-        environementConfigPre = await self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo]
+        #environementConfigPre = await self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo]
         #Test
-        async with AsyncClient(app=app_sccs,base_url="http://devops-console") as client:
+        async with AsyncClient(base_url=self.hookPath) as client:
             response = await client.post(path,headers=headers,json=push_payload)
 
         #Assert
             #import pdb; pdb.set_trace()
             environementConfigResults = self.bitbucketPlugin.cache["continuousDeploymentConfig"].get(testRepo)
-            self.assertTrue(response.status_code == 200)
-            self.assertTrue(environementConfigResults is not None)
+            self.assertEqual(response.status_code , 200)
+            self.assertIsNotNone(environementConfigResults)
 
     #@mock.patch('devops_sccs.plugins.bitbucketcloud.Bitbucket')
-    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
-    async def test8_Given_get_continuous_deployment_config_When_another_user_get_same_repo_Then_data_should_be_get_from_cache(self,mock_uvicorn):  
+    async def test8_Given_get_continuous_deployment_config_When_another_user_get_same_repo_Then_data_should_be_get_from_cache(self):  
         self.core = await SccsCore.create(self.config)
         await self.bitbucketPlugin.init(self.core, self.args)
         
@@ -259,9 +261,8 @@ class TestBitbucketCloud(asynctest.TestCase):
         
         self.assertTrue(result['master']==edited['master'])
 
-    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
     @pytest.mark.anyio
-    async def test9_Given_get_continuous_deployment_config_When_handle_push_deploydev_Then_data_should_be_get_updated_in_cache(self,mock_uvicorn):
+    async def test9_Given_get_continuous_deployment_config_When_handle_push_deploydev_Then_data_should_be_get_updated_in_cache(self):
         self.core = await SccsCore.create(self.config)
         await self.bitbucketPlugin.init(self.core, self.args)
 
@@ -297,16 +298,53 @@ class TestBitbucketCloud(asynctest.TestCase):
 
        # environementConfigResults = await self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo]
         #Test
-        async with AsyncClient(app=app_sccs,base_url="http://devops-console") as client:
+        async with AsyncClient(base_url=self.hookPath) as client:
             response = await client.post(path,headers=headers,json=push_payload)
 
         #Assert
            
             environementConfigResults = self.bitbucketPlugin.cache["continuousDeploymentConfig"].get(testRepo)
-            self.assertTrue(response.status_code == 200)
-            self.assertTrue(environementConfigResults is not None)
+            self.assertEqual(response.status_code , 200)
+            self.assertIsNotNone(environementConfigResults)
             #import pdb; pdb.set_trace()
             self.assertEqual(environementConfigResults["deploy/dev"].version , version)
+
+    @mock.patch('devops_sccs.realtime.hookserver.uvicorn')
+    @pytest.mark.anyio
+    async def test10_Given_cache_ref_class_containing_it_When_sent_to_other_thread_Then_should_sync_multi_thread(self,mock_uvicorn):
+
+        cache_key = 'a'
+        value_key = 'a'
+        
+        def assert_value(expected_value,environement):
+            result = a.cache[cache_key].get(value_key)
+            self.assertEqual(result,expected_value,f"\"{result}\" is not equal \"{expected_value}\" in {environement}")
+
+        #testing single process
+        test_server = CacheTest_Server()
+        a = CacheTest_PluginA(test_server)
+        await a.get_a(value_key)
+        assert_value('abc',"single process")
+        
+        a.b = 'a'
+
+        async with AsyncClient(app=app_test,base_url="http://localhost:5002") as client:
+            response = await client.post(a.path)
+            self.assertEqual(response.status_code ,200)
+            assert_value('aac','client in async post')
+
+        test_server.run_test_edit_cache_alone(a.cache[cache_key],value_key,'c')
+        assert_value('c','edit directly from other process')
+
+        test_server.run_test_edit_cache_in_dict(a.cache,cache_key,value_key,'d')
+        assert_value('d','edit dictionary containing cache from other process')
+
+        test_server.run_test_edit_from_class(a,cache_key,value_key,'e')
+        assert_value('e','edit class containing cache from other process')
+
+        a.b = 'f'
+        test_server.run_test_run_uvicorn()
+        assert_value('afc','uvicorn post')
 
 if __name__ == '__main__':
     unittest.main()
