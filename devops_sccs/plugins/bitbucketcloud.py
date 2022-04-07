@@ -17,9 +17,12 @@ import re
 import logging
 import time
 import inspect
+import weakref
 
+from copy import deepcopy
 from fastapi import Request 
 from contextlib import asynccontextmanager
+
 from aiobitbucket.bitbucket import Bitbucket
 from aiobitbucket.typing.refs import Branch
 from aiobitbucket.apis.repositories.repository import RepoSlug
@@ -45,7 +48,6 @@ class BitbucketCloud(Sccs):
         """
         Initialize the plugin
         """
-
         self.cache_local_sessions={}
         self.lock_cache_local_sessions = asyncio.Lock()
         
@@ -67,12 +69,13 @@ class BitbucketCloud(Sccs):
         }
         
         
-
+        
         if hasattr(core, 'hookServer'):
+            "create the nessesary caches"
             self.cache = core.hookServer.create_dict()
             self.cache = {}
             self.cache["repo"]=core.hookServer.create_cache(self.get_repository,'repository',session=None)
-            self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
+            self.cache_continuousDeploymentConfig=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
             self.cache["continuousDeploymentConfigAvailable"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
             self.cache["available"]=core.hookServer.create_cache(self._fetch_continuous_deployment_versions_available,'repository')
             self.__routing_init()
@@ -81,11 +84,14 @@ class BitbucketCloud(Sccs):
         """
         Initialise all the nessesary paths for hooks.
         """
-        
+        print("init routing")
         cust_logger = logging.getLogger("aiohttp.access") 
         
-        @app_sccs.post(f"/{PLUGIN_NAME}/hooks/repo")
+        @app_sccs.post(f"/{PLUGIN_NAME}/hooks/repo",)
         async def __handle_Hooks_Repo(request:Request):
+            """
+                handle the repo endpoint.
+            """
             cust_logger.info("__handle_Hooks_Repo request")
             event = HookEvent_t(request.headers["X-Event-Key"])
             responseJson = await request.json()
@@ -93,18 +99,18 @@ class BitbucketCloud(Sccs):
             
             if event == HookEvent_t.REPO_DELETED :
                 cust_logger.info("__handle_delete_Repo")
-                #self.__handle_delete_repo(UUID)
+                self.__handle_delete_repo(UUID)
             else:
                 Workspace = responseJson["repository"]["workspace"]["slug"]
                 
                 self.cache["repo"][UUID] = RepoSlug(None,workspace_name=Workspace,repo_slug_name= responseJson["repository"]["name"],data=responseJson["repository"])
                 if event == HookEvent_t.REPO_PUSH:
                     cust_logger.info("__handle_push_Repo")
-                    #await self.__handle_push(UUID,responseJson)
+                    await self.__handle_push(UUID,responseJson)
 
                 elif event == HookEvent_t.REPO_COMMIT_STATUS_CREATED or event == HookEvent_t.REPO_COMMIT_STATUS_UPDATED :
                     cust_logger.info("__handle_commit_status")
-                    #await self.__handle_commit_status (UUID,event,responseJson)
+                    await self.__handle_commit_status (UUID,event,responseJson)
                 
         return __handle_Hooks_Repo
 
@@ -114,6 +120,7 @@ class BitbucketCloud(Sccs):
                         del self.cache[key][UUID]
 
     async def __handle_push(self,UUID,responseJson):
+        #only works with devops-console deployments
         triggerContinuousDeploymentPattern = re.compile(r'^deploy version ([0-9a-fA-F]+)$')
         
         for change in responseJson["push"]["changes"]:
@@ -128,11 +135,11 @@ class BitbucketCloud(Sccs):
                     env.version = versionMatch.group(1)
                     #import pdb; pdb.set_trace()
                     #! race condition here !
-                    with self.cache["continuousDeploymentConfig"] :
+                    #with self.cache_continuousDeploymentConfig :
                         
-                        tempDict = await self.cache["continuousDeploymentConfig"][UUID]
-                        tempDict[newName]= env
-                        self.cache["continuousDeploymentConfig"][UUID] = tempDict
+                    tempDict = await self.cache_continuousDeploymentConfig[UUID]
+                    tempDict= env
+                    self.cache_continuousDeploymentConfig[UUID] = tempDict
 
                 except ValueError:
                     pass
@@ -149,10 +156,10 @@ class BitbucketCloud(Sccs):
             build_nb = re.search("/(\d+)$",response_json["commit_status"]["url"]).group(1)
             env = self.cd_environments[self.cd_branches_accepted.index(response_json["commit_status"]["refname"])]
             if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
-                self.cache["continuousDeploymentConfig"][UUID][env] = self._create_continuous_deployment_config_by_branch(response_json["repository"]["name"],build_nb,response_json["commit_status"]["refname"],env)
+                self.cache_continuousDeploymentConfig[UUID][env] = self._create_continuous_deployment_config_by_branch(response_json["repository"]["name"],build_nb,response_json["commit_status"]["refname"],env)
 
             if(curr_status_state == commit_status_state.SUCCESSFUL):
-                #add it to the cache
+                #add it to the available cache
                 local_available = await self.cache["available"][UUID]
 
                 i = 0
@@ -391,25 +398,25 @@ class BitbucketCloud(Sccs):
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        response = []
+        response = {}
         for result in results:
-            response.append(result[1])#response[result[0]]=result[1]
+            #response.append(result[1])
+            response[result[0]]=result[1]
         
         return response
 
     async def get_continuous_deployment_config(self, session, repository, environments=None, args=None):
-        return await  self._fetch_continuous_deployment_config(repository,session,environments)
-        #results = []
+        #return await  self._fetch_continuous_deployment_config(repository,session,environments)
+        results = []
         #Fetch in the cache
-       
-        #TempDict = await self.cache["continuousDeploymentConfig"][repository]
-        #if environments is not None :
-        #    for branch in TempDict:
-        #        if TempDict[branch].environment in environments:
-        #            results.append(TempDict[branch])
-        #else:
-        #    results = TempDict
-        #return results  
+        TempDict = await self.cache_continuousDeploymentConfig[repository]
+        if environments is not None :
+            for branch in TempDict:
+                if TempDict[branch].environment in environments:
+                    results.append(TempDict[branch])
+        else:
+            results = TempDict
+        return results  
 
     async def _fetch_continuous_deployment_environments_available(self, repository,session=None) -> list:
         """
@@ -437,7 +444,8 @@ class BitbucketCloud(Sccs):
             return response
 
     async def get_continuous_deployment_environments_available(self, session, repository, args) -> list:
-            return await self._fetch_continuous_deployment_environments_available(repository,session)#self.cache["continuousDeploymentConfigAvailable"][repository]
+            #return await self._fetch_continuous_deployment_environments_available(repository,session)
+            return await self.cache["continuousDeploymentConfigAvailable"][repository]
 
     async def _fetch_continuous_deployment_versions_available(self, repository, session=None) -> list:
         self.__log_session(session)
@@ -461,8 +469,8 @@ class BitbucketCloud(Sccs):
 
     async def get_continuous_deployment_versions_available(self, session, repository, args) -> list:
         #if(session is not None):
-            return await self._fetch_continuous_deployment_versions_available(repository,session)
-        #return await self.cache["available"][repository]
+            #return await self._fetch_continuous_deployment_versions_available(repository,session)
+        return await self.cache["available"][repository]
 
     async def trigger_continuous_deployment(self, session, repository, environment, version, args) -> typing_cd.EnvironmentConfig:
         """see plugin.py"""
@@ -522,7 +530,7 @@ class BitbucketCloud(Sccs):
                 branch if deploy_branch is None else deploy_branch.name
             )
             
-            with self.cache["continuousDeploymentConfig"] as cache :
+            with self.cache_continuousDeploymentConfig as cache :
                 if deploy_branch is not None:
                     # Continuous Deployment is done with a PR.
                     pr = repo.pullrequests().new()
@@ -540,9 +548,7 @@ class BitbucketCloud(Sccs):
                     continuous_deployment.version = version
 
                 #race condition finish after that statement.
-                #cache[deploy_branch] = continuous_deployment
-
-            #race condition finish after that statement.
+                cache[deploy_branch] = continuous_deployment
             #(await self.cache["continuousDeploymentConfig"][repository])[deploy_branch] = continuous_deployment
 
             # Return the new configuration (new version or PR in progress)
@@ -559,9 +565,24 @@ class BitbucketCloud(Sccs):
             return repo
     
     def __log_session(self,session:dict):
+        """
+        helper function for keeping track of who calls what.
+        """
         cust_logger = logging.getLogger("aiohttp.access") 
         funcName = inspect.getouterframes(inspect.currentframe(), 2)[1][3] #gets the function name using the callstack
         username =  "Watcher" 
         if session is not None:#by default  None is the watcher
             username = session['user']['user']
-        cust_logger.info(f"{username} called {funcName}")
+        cust_logger.debug(f"{username} called {funcName}")
+    
+    def __new__(cls):
+        print("new bitbucket")
+        return super().__new__(cls)
+    
+    def __getstate__(self) :
+        print("get state bitbucket")
+        return self.__dict__
+    
+    def __setstate__(self,state):
+        print("set state bitbucket")
+        self.__dict__ = state
