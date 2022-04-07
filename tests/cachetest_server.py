@@ -4,12 +4,12 @@ import multiprocessing
 import threading
 import uvicorn
 import signal
-from hypercorn.config import Config
 from hypercorn.asyncio import serve
-
+from hypercorn.config import Config
+import time
 
 from httpx import AsyncClient
-from fastapi import FastAPI,Request
+from fastapi import FastAPI
 from devops_sccs.cache import *
 
 
@@ -17,8 +17,9 @@ app_test = FastAPI()
 
 #analog to hook server
 class CacheTest_Server(object):
+    manager = multiprocessing.Manager()
     def __init__(self) :
-        self.manager = multiprocessing.Manager()
+        pass   
 
     @staticmethod
     def __run_test_async(func, *args,**kwargs):
@@ -30,66 +31,63 @@ class CacheTest_Server(object):
         p.start()
         p.join()  
     
-    @staticmethod
-    def run_test_post_from_thread():
+    @classmethod
+    def run_test_post_from_thread(cls,path):
         async def fn(app_):
             async with AsyncClient(app=app_,base_url="http://devops-console") as client:
-               return await client.post("/a")
-        CacheTest_Server.__run_test_async(fn,app_test)
+               return await client.post(path)
+        cls.__run_test_async(fn,app_test)
           
-    @staticmethod
-    def run_test_edit_cache_in_dict(cache,cache_key,key,value):
+    @classmethod
+    def run_test_edit_cache_in_dict(cls,cache,cache_key,key,value):
         
         async def fn(cache,cache_key,key,value):
             cache[cache_key][key]=value
-        CacheTest_Server.__run_test_async( fn,cache,cache_key,key,value)
+        cls.__run_test_async( fn,cache,cache_key,key,value)
     
-    @staticmethod
-    def run_test_edit_cache_alone(cache:AsyncCache,key,value):
+    @classmethod
+    def run_test_edit_cache_alone(cls,cache:AsyncCache,key,value):
         async def fn(cache,key,value):
             cache[key]=value
-        CacheTest_Server.__run_test_async( fn,cache,key,value)
+        cls.__run_test_async( fn,cache,key,value)
     
-    @staticmethod
-    def run_test_edit_from_class(obj,cache_key,key,value):
+    @classmethod
+    def run_test_edit_from_class(cls,obj,cache_key,key,value):
         async def fn(obj,cache_key,key,value):
             obj.cache[cache_key][key]=value
-        CacheTest_Server.__run_test_async( fn,obj,cache_key,key,value)
-
-    def __run_server(self,fn,stop_fn,path,**kwargs):
+        cls.__run_test_async( fn,obj,cache_key,key,value)
+    
+    @classmethod
+    def __run_server(cls,fn,path,*args,**kwargs):
         try:
-            self.loop = asyncio.new_event_loop()
-            self.threadedServer = threading.Thread(target = fn, args = (self.loop, ),kwargs= kwargs)
-            self.threadedServer.daemon=True  
-            self.threadedServer.start()
+            threadedServer = multiprocessing.Process(target = fn, args = args,kwargs= kwargs,daemon=True)
+            threadedServer.start()
+            time.sleep(1)
             async def async_post():
                 async with AsyncClient() as client:
                     return await client.post(path)
-            self.__run_test_async(async_post)
-            stop_fn()
+            cls.__run_test_async(async_post)
+
         except Exception as s :
             raise s
         finally:
-            self.loop.close()
-            self.threadedServer.join(timeout=0)
+            threadedServer.terminate()
             
+    @classmethod
+    def run_test_run_uvicorn(cls,path):
+        cls.__run_server(uvicorn.run,f"http://localhost:5001{path}",app_test, host = 'localhost', port = 5001, access_log = True)
 
-    def run_test_run_uvicorn(self):
-        self.lifespan= self.manager.Value(str,'on')
-        def fn(loop):
-            asyncio.set_event_loop(loop)
-            try:
-                uvicorn.run(app_test, host = 'localhost', port = 5002, access_log = True,)
-            except RuntimeError as s:
-                pass
 
-        def stop_fn():
-            self.lifespan ='off'
-
-        self.__run_server(fn,stop_fn,"http://localhost:5002/a")
-
+    @classmethod        
+    def run_test_run_hypercorn(cls,path):
         
+        def run_func(func,*args,**kwargs):
+            return asyncio.run(func(*args,**kwargs))
         
+        config = Config()
+        config.bind = ["localhost:5001"]
+
+        cls.__run_server(run_func,f"http://localhost:5001{path}",serve,app_test,config)
 
     def create_cache(self , lookup_func = None,key_arg = None , **kwargs_func):
         return AsyncCache(self.manager.dict(),lookup_func,key_arg,self.manager.RLock(),**kwargs_func)
