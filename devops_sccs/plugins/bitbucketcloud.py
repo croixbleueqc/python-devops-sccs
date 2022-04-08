@@ -430,7 +430,7 @@ class BitbucketCloud(Sccs):
         TempDict = await self.cache["continuousDeploymentConfig"][repository]
         if environments is not None :
             for branch in TempDict:
-                import pdb;pdb.set_trace()
+                # import pdb;pdb.set_trace()
                 if TempDict[branch].environment in environments:
                     results.append(TempDict[branch])
         else:
