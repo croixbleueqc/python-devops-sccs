@@ -77,6 +77,7 @@ class Core(object):
         self.enableHook = config.get("hook_server") is not None
         if self.enableHook :
             self.hookServer = HookServer(config["hook_server"])
+            #we need to lock it up here , otherwise the endpoints won't register.
             await self.hookServer.lock.acquire()   
         val = await self.load_builtin_plugins(config.get("plugins", {}))
 
