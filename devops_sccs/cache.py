@@ -18,7 +18,8 @@ from multiprocessing import managers
 import logging
 import multiprocessing
 import threading
-        
+import traceback
+
 class AsyncCache(object):
     def __init__ (self ,data ,lookup_func,key_arg:str=None,rlock = multiprocessing.RLock(), **kwargs_func):
         """
@@ -35,13 +36,11 @@ class AsyncCache(object):
         self.key_arg = key_arg
         self.kwargs_func =  kwargs_func
         self.rlock = rlock 
-
+        logging.debug(f"new cache at : {self.data.__repr__()}")
     def get(self,key):
-        AsyncCache.lastGet=self.data.__repr__()
         return self.data.get(key)
 
     async def __getitem__(self, key):
-        print(self.data)
         val = self.data.get(key)
         if(val is None):
         
@@ -49,10 +48,9 @@ class AsyncCache(object):
                 with self.rlock as lock:
                     #check if the data is still unitialized
                     val = self.data.get(key)                    
-                    if (val is None or self.isNew) :
-                        AsyncCache.lastGet=self.data.__repr__()
+                    if (val is None) :
                         #data is definetly unitialized
-                        logging.debug(f"element {key} not found in the cache! populating it!")
+                        logging.debug(f"element {key} not found in the cache at {self.data.__repr__()}! populating it!")
                         self.kwargs_func[self.key_arg] = key
                         val = await self.lookup_func(**self.kwargs_func)
                         self.data[key]=val
@@ -66,18 +64,12 @@ class AsyncCache(object):
 
     def __setitem__(self, key, item) :
         with self.rlock as lock :
-            print(self.data)
-            logging.debug(f"key {key} has been set!")
+            logging.debug(f"key {key} has been set at {self.data.__repr__()} !")
             self.data[key]=item
-            AsyncCache.lastSet=self.data.__repr__()
 
     def __enter__(self):
         self.rlock.acquire()
         return self.data
-
-    def __reduce__(self) :
-        print("reduce cache!")
-        pass
     
     def __exit__(self,type, value, traceback):
         self.rlock.release()

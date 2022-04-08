@@ -48,6 +48,7 @@ class BitbucketCloud(Sccs):
         """
         Initialize the plugin
         """
+
         self.cache_local_sessions={}
         self.lock_cache_local_sessions = asyncio.Lock()
         
@@ -75,7 +76,7 @@ class BitbucketCloud(Sccs):
             self.cache = core.hookServer.create_dict()
             self.cache = {}
             self.cache["repo"]=core.hookServer.create_cache(self.get_repository,'repository',session=None)
-            self.cache_continuousDeploymentConfig=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
+            self.cache["continuousDeploymentConfig"]=core.hookServer.create_cache(self._fetch_continuous_deployment_config,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
             self.cache["continuousDeploymentConfigAvailable"]=core.hookServer.create_cache(self._fetch_continuous_deployment_environments_available,'repository',session={'user':{'user':args["watcher"]["user"],'apikey':args["watcher"]["pwd"]}})
             self.cache["available"]=core.hookServer.create_cache(self._fetch_continuous_deployment_versions_available,'repository')
             self.__routing_init()
@@ -137,9 +138,9 @@ class BitbucketCloud(Sccs):
                     #! race condition here !
                     #with self.cache_continuousDeploymentConfig :
                         
-                    tempDict = await self.cache_continuousDeploymentConfig[UUID]
+                    tempDict = await self.cache["continuousDeploymentConfig"][UUID]
                     tempDict= env
-                    self.cache_continuousDeploymentConfig[UUID] = tempDict
+                    self.cache["continuousDeploymentConfig"][UUID] = tempDict
 
                 except ValueError:
                     pass
@@ -156,7 +157,7 @@ class BitbucketCloud(Sccs):
             build_nb = re.search("/(\d+)$",response_json["commit_status"]["url"]).group(1)
             env = self.cd_environments[self.cd_branches_accepted.index(response_json["commit_status"]["refname"])]
             if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
-                self.cache_continuousDeploymentConfig[UUID][env] = self._create_continuous_deployment_config_by_branch(response_json["repository"]["name"],build_nb,response_json["commit_status"]["refname"],env)
+                self.cache["continuousDeploymentConfig"][UUID][env] = self._create_continuous_deployment_config_by_branch(response_json["repository"]["name"],build_nb,response_json["commit_status"]["refname"],env)
 
             if(curr_status_state == commit_status_state.SUCCESSFUL):
                 #add it to the available cache
@@ -409,13 +410,13 @@ class BitbucketCloud(Sccs):
         #return await  self._fetch_continuous_deployment_config(repository,session,environments)
         results = []
         #Fetch in the cache
-        TempDict = await self.cache_continuousDeploymentConfig[repository]
+        TempDict = await self.cache["continuousDeploymentConfig"][repository]
         if environments is not None :
             for branch in TempDict:
                 if TempDict[branch].environment in environments:
                     results.append(TempDict[branch])
         else:
-            results = TempDict
+            results = [TempDict[branch] for branch in TempDict]
         return results  
 
     async def _fetch_continuous_deployment_environments_available(self, repository,session=None) -> list:
@@ -448,6 +449,10 @@ class BitbucketCloud(Sccs):
             return await self.cache["continuousDeploymentConfigAvailable"][repository]
 
     async def _fetch_continuous_deployment_versions_available(self, repository, session=None) -> list:
+        """
+        fetch the versions of the 
+        repository: 
+        """
         self.__log_session(session)
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             # commits available to be deployed
@@ -530,7 +535,7 @@ class BitbucketCloud(Sccs):
                 branch if deploy_branch is None else deploy_branch.name
             )
             
-            with self.cache_continuousDeploymentConfig as cache :
+            with self.cache["continuousDeploymentConfig"] as cache :
                 if deploy_branch is not None:
                     # Continuous Deployment is done with a PR.
                     pr = repo.pullrequests().new()
@@ -576,13 +581,5 @@ class BitbucketCloud(Sccs):
         cust_logger.debug(f"{username} called {funcName}")
     
     def __new__(cls):
-        print("new bitbucket")
+        logging.debug("new bitbucket")
         return super().__new__(cls)
-    
-    def __getstate__(self) :
-        print("get state bitbucket")
-        return self.__dict__
-    
-    def __setstate__(self,state):
-        print("set state bitbucket")
-        self.__dict__ = state

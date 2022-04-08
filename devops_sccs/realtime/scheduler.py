@@ -36,13 +36,13 @@ class Scheduler(object):
         Run a new task or connect to an existing task
         """
         wid = hash(identity)
-        logging.debug(f"wid: {wid}")
+        logging.debug(f"wid: {hex(wid)}")
 
         # Protect task creation
         async with self.lock_tasks:
             w = self.tasks.get(wid)
             if w is None:
-                logging.debug(f"scheduler: creating a new watcher for {wid}")
+                logging.debug(f"scheduler: creating a new watcher for {hex(wid)}")
                 w = Watcher(wid, poll_interval, func, **kwargs)
                 self.tasks[wid] = w
 
@@ -74,7 +74,7 @@ class Scheduler(object):
             # Protect task update
             async with self.lock_tasks:
                 if w.is_no_watcher():
-                    logging.debug(f"scheduler: remove watcher {wid}")
+                    logging.debug(f"scheduler: remove watcher {hex(wid)}")
                     self.tasks.pop(wid)
     
     async def hook(self, identity: tuple, filtering=lambda event: True, **kwargs):
@@ -82,13 +82,13 @@ class Scheduler(object):
         Run a new task or connect to an existing task
         """
         wid = hash(identity)
-        logging.debug(f"wid: {wid}")
+        logging.debug(f"wid: {hex(wid)}")
 
         # Protect task creation
         async with self.lock_tasks:
             w = self.tasks.get(wid)
             if w is None:
-                logging.debug(f"scheduler: creating a new hook for {wid}")
+                logging.debug(f"scheduler: creating a new hook for {hex(wid)}")
                 w = HookClient(wid, **kwargs)
                 self.tasks[wid] = w
 
@@ -120,7 +120,7 @@ class Scheduler(object):
             # Protect task update
             async with self.lock_tasks:
                 if w.is_no_hooked():
-                    logging.debug(f"scheduler: remove hook {wid}")
+                    logging.debug(f"scheduler: remove hook {hex(wid)}")
                     self.tasks.pop(wid)
 
     def notify(self, identity: tuple):
@@ -132,5 +132,5 @@ class Scheduler(object):
         w = self.tasks.get(wid)
 
         if w is not None:
-            logging.debug(f"notify {wid}")
+            logging.debug(f"notify {hex(wid)}")
             w.refresh()

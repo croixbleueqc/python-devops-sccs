@@ -24,13 +24,14 @@ class HookServer:
 
     async def start_server(self):
         async with self.lock :
-            #print([{"path": route.path, "name": route.name} for route in app_sccs.routes])
+            logging.debug([{"path": route.path, "name": route.name} for route in app_sccs.routes])
 
             self.threadedServer = multiprocessing.Process(target = uvicorn.run, args=(app_sccs,), kwargs={'host':self.host, 'port':self.port, 'access_log':True},daemon=True)
             self.threadedServer.start()
 
     def stop_server(self):
-        self.threadedServer.terminate()
+        self.threadedServer.join()
+        self.manager.shutdown()
     
     def create_dict(self):
         return self.manager.dict()
@@ -39,6 +40,7 @@ class HookServer:
         return AsyncCache(self.manager.dict(),lookup_func,key_arg,self.manager.RLock(),**kwargs_func)
 
     def __del__(self):
+
         if hasattr(self,'threadedServer'):
             if(self.threadedServer.is_alive()):
                 self.threadedServer.terminate()
