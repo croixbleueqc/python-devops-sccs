@@ -36,9 +36,12 @@ class AsyncCache(object):
         self.key_arg = key_arg
         self.kwargs_func =  kwargs_func
         self.rlock = rlock 
-        logging.debug(f"new cache at : {self.data.__repr__()}")
+        print(f"new cache at : {self.data.__repr__()}")
     def get(self,key):
         return self.data.get(key)
+
+    def clear_cache(self):
+        self.data.clear()
 
     async def __getitem__(self, key):
         val = self.data.get(key)
@@ -50,7 +53,7 @@ class AsyncCache(object):
                     val = self.data.get(key)                    
                     if (val is None) :
                         #data is definetly unitialized
-                        logging.debug(f"element {key} not found in the cache at {self.data.__repr__()}! populating it!")
+                        print(f"element {key} not found in the cache at {self.data.__repr__()}! populating it!")
                         self.kwargs_func[self.key_arg] = key
                         val = await self.lookup_func(**self.kwargs_func)
                         self.data[key]=val
@@ -64,7 +67,7 @@ class AsyncCache(object):
 
     def __setitem__(self, key, item) :
         with self.rlock as lock :
-            logging.debug(f"key {key} has been set at {self.data.__repr__()} !")
+            print(f"key {key} has been set at {self.data.__repr__()} !")
             self.data[key]=item
 
     def __enter__(self):
@@ -75,16 +78,16 @@ class AsyncCache(object):
         self.rlock.release()
 
     def __new__(cls,*args,**kwargs) :
-        print("new cache!")
+        logging.debug("new cache!")
         return super().__new__(cls)
 
     def __getstate__(self) :
-        print("get state cache")
+        logging.debug("get state cache")
         return self.__dict__
     
     def __setstate__(self,state):
-        print("set state cache")
+        logging.debug("set state cache")
         self.__dict__ = state
     def __copy__(self):
-        print("copy cache!")
+        logging.debug("copy cache!")
         self.__dict__.copy()

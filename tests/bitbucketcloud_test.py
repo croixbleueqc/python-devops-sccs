@@ -6,6 +6,7 @@ import asynctest
 import mock
 import pytest
 import time
+import gc
 
 import sys
 import os
@@ -62,7 +63,8 @@ def getMockEnvironmentConfig(environment,version="qwerty123456",readonly=False,p
     return result
 
 class TestBitbucketCloud(asynctest.TestCase):
-    
+    use_default_loop=True
+
     def setUp(self):
         with open('tests/bitbucketcloud_test_core.json', 'r') as f:
             self.config = json.load(f)
@@ -89,10 +91,12 @@ class TestBitbucketCloud(asynctest.TestCase):
         self.hookPath = f"http://{self.config['hook_server']['host']}:{self.config['hook_server']['port']}"
 
     async def tearDown(self):
+
         await self.bitbucketPlugin.cleanup()
         if self.core is not None:
             await self.core.cleanup()
-            time.sleep(.5)
+        time.sleep(.5)
+        gc.collect()
 
     async def getSession2(self):
         
@@ -265,14 +269,15 @@ class TestBitbucketCloud(asynctest.TestCase):
 
         original = await self.bitbucketPlugin.get_continuous_deployment_config(session,testRepo)
         
-        edited = copy.copy(original)
-        
+        edited = await self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo]
+
         edited['master'].version = "deadf00dbeef"
 
         self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo] = edited 
         result = await self.bitbucketPlugin.get_continuous_deployment_config(session2,testRepo)
         
-        self.assertTrue(result['master']==edited['master'])
+        self.assertTrue(result[0]!=original[0])
+        self.assertEqual(edited['master'],result[0])
 
     @pytest.mark.anyio
     async def test09_Given_get_continuous_deployment_config_When_handle_push_deploydev_Then_data_should_be_get_updated_in_cache(self):
@@ -309,7 +314,8 @@ class TestBitbucketCloud(asynctest.TestCase):
             }
         }
 
-       # environementConfigResults = await self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo]
+        #environementConfigResults = await self.bitbucketPlugin.cache["continuousDeploymentConfig"][testRepo]
+        #import pdb; pdb.set_trace()
         #Test
         time.sleep(.5)
         async with AsyncClient(base_url=self.hookPath) as client:
@@ -320,7 +326,7 @@ class TestBitbucketCloud(asynctest.TestCase):
             environementConfigResults = self.bitbucketPlugin.cache["continuousDeploymentConfig"].get(testRepo)
             self.assertEqual(response.status_code , 200)
             self.assertIsNotNone(environementConfigResults)
-            #import pdb; pdb.set_trace()
+            
             self.assertEqual(environementConfigResults["deploy/dev"].version , version)
 
     @mock.patch('devops_sccs.realtime.hookserver.uvicorn')

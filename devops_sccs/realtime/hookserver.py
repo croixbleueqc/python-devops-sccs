@@ -6,7 +6,8 @@ import logging
 import asyncio
 from ..cache import AsyncCache
 from fastapi import FastAPI
-import time
+import os
+import signal
 # sccs fast api server entrypoint
 app_sccs = FastAPI()
 
@@ -30,9 +31,10 @@ class HookServer:
             self.threadedServer.start()
 
     def stop_server(self):
-        self.threadedServer.join()
-        self.manager.shutdown()
-    
+        try:
+            os.kill (self.threadedServer.pid,signal.SIGINT)
+        except KeyboardInterrupt:
+            self.threadedServer.close()
     def create_dict(self):
         return self.manager.dict()
 
@@ -44,3 +46,4 @@ class HookServer:
         if hasattr(self,'threadedServer'):
             if(self.threadedServer.is_alive()):
                 self.threadedServer.terminate()
+        
