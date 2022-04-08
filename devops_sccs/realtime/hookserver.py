@@ -19,13 +19,15 @@ class HookServer:
         self.host = settings['host']
         self.port = settings['port']
         self.manager = Manager()
+        self.lock = asyncio.Lock()
         
 
-    def start_server(self):
-        #print([{"path": route.path, "name": route.name} for route in app_sccs.routes])
+    async def start_server(self):
+        async with self.lock :
+            #print([{"path": route.path, "name": route.name} for route in app_sccs.routes])
 
-        self.threadedServer = multiprocessing.Process(target = uvicorn.run, args=(app_sccs,), kwargs={'host':self.host, 'port':self.port, 'access_log':True},daemon=True)
-        self.threadedServer.start()
+            self.threadedServer = multiprocessing.Process(target = uvicorn.run, args=(app_sccs,), kwargs={'host':self.host, 'port':self.port, 'access_log':True},daemon=True)
+            self.threadedServer.start()
 
     def stop_server(self):
         self.threadedServer.terminate()

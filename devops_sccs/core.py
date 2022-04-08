@@ -77,13 +77,14 @@ class Core(object):
         self.enableHook = config.get("hook_server") is not None
         if self.enableHook :
             self.hookServer = HookServer(config["hook_server"])
-            
-        await self.load_builtin_plugins(config.get("plugins", {}))
+            await self.hookServer.lock.acquire()   
+        val = await self.load_builtin_plugins(config.get("plugins", {}))
 
-        await self.load_external_plugins(config.get("plugins", {}))
+        val = await self.load_external_plugins(config.get("plugins", {}))
         
-        if self.enableHook :
-            self.hookServer.start_server()
+        if self.enableHook & val :
+            self.hookServer.lock.release()
+            await self.hookServer.start_server()
 
         return self
 
@@ -110,6 +111,8 @@ class Core(object):
         if builtin.get("demo", True):
             plugin_id, plugin = plugin_demo.init_plugin()
             await self.register(plugin_id, plugin, config.get("demo"))
+        
+        return True
 
     async def load_external_plugins(self, plugins_config):
         """External plugins
@@ -133,7 +136,7 @@ class Core(object):
 
             plugin_id, plugin = mod.init_plugin()
             await self.register(plugin_id, plugin, config.get(plugin_id))
-
+        return True 
     async def register(self, plugin_id, plugin, config):
         """Register a plugin to make it available"""
         if plugin_id in self.plugins:
@@ -141,6 +144,7 @@ class Core(object):
 
         await plugin.init(self, config)
         self.plugins[plugin_id] = plugin
+        
 
     async def unregister(self, plugin_id):
         plugin = self.plugins.pop(plugin_id)
