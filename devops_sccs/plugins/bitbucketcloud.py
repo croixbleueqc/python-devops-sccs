@@ -157,7 +157,10 @@ class BitbucketCloud(Sccs):
         """
         This hook is only called on the Master branch for handling compilation events  
         """
+        cust_logger = logging.getLogger("aiohttp.access") 
+        
         if(response_json["commit_status"]["refname"] in self.cd_versions_available):
+            cust_logger.info("refname in version available")
             
             curr_status_state = response_json["commit_status"]["state"]
 
@@ -165,10 +168,12 @@ class BitbucketCloud(Sccs):
             build_nb = re.search("/(\d+)$",response_json["commit_status"]["url"]).group(1)
             env = self.cd_environments[self.cd_branches_accepted.index(response_json["commit_status"]["refname"])]
             if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
+                cust_logger.info("commit status created")
                 self.cache["continuousDeploymentConfig"][UUID][env] = self._create_continuous_deployment_config_by_branch(response_json["repository"]["name"],build_nb,response_json["commit_status"]["refname"],env)
 
             if(curr_status_state == commit_status_state.SUCCESSFUL):
                 #add it to the available cache
+                cust_logger.info(f"commit status state successful : {response_json['commit_status']}")
                 local_available = await self.cache["available"][UUID]
 
                 i = 0
@@ -186,7 +191,8 @@ class BitbucketCloud(Sccs):
 
                         local_available.insert(i,available)
                         break
-            
+                        
+                cust_logger.info("self cache set")
                 self.cache["available"][UUID] = local_available
 
     async def cleanup(self):
