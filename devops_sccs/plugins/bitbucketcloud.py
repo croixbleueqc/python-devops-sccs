@@ -183,9 +183,10 @@ class BitbucketCloud(Sccs):
             # commit_status_state.SUCCESSFUL
             if(curr_status_state == "SUCCESSFUL"):
                 #add it to the available cache
-                cust_logger.info(f"commit status state successful")
+                cust_logger.info(f"commit status state successful : {UUID}")
                 local_available = await self.cache["available"][UUID]
 
+                cust_logger.info(f"local available : {local_available}")
                 i = 0
                 for conf in local_available:
                     if conf.build > build_nb :
@@ -487,6 +488,10 @@ class BitbucketCloud(Sccs):
             return await self.cache["continuousDeploymentConfigAvailable"][repository]
 
     async def _fetch_continuous_deployment_versions_available(self, repository, session=None) -> list:
+        
+        cust_logger = logging.getLogger("aiohttp.access") 
+        cust_logger.info(f"_fetch_continuous_deployment_versions_available on repo : {repository}")
+        
         self.__log_session(session)
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             # commits available to be deployed
@@ -497,6 +502,7 @@ class BitbucketCloud(Sccs):
             async for pipeline in repo.pipelines().get(filter='sort=-created_on'):
                 if pipeline.target.ref_name in self.cd_versions_available and \
                    pipeline.state.result.name == "SUCCESSFUL":
+                    cust_logger.info(f"pipeline available : {pipeline}")
                     available = typing_cd.Available(hash((repository, pipeline.build_number)))
                     available.build = pipeline.build_number
                     available.version = pipeline.target.commit.hash
@@ -504,6 +510,10 @@ class BitbucketCloud(Sccs):
                     
                     response.append(available)
 
+                else:
+                    cust_logger.info(f"pipeline not available : {pipeline}")
+                    
+            cust_logger.info(f"version on repo : {repository} is : {response}")
             return response
 
     async def get_continuous_deployment_versions_available(self, session, repository, args) -> list:
