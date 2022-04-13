@@ -178,9 +178,11 @@ class BitbucketCloud(Sccs):
             env = self.cd_environments[self.cd_branches_accepted.index(refName)]
             if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
                 cust_logger.info("commit status created")
-                self.cache["continuousDeploymentConfig"][UUID][refName] = self._create_continuous_deployment_config_by_branch(repoName,build_nb,refName,env)
+                tmp = self._create_continuous_deployment_config_by_branch(repoName,build_nb,refName,env)
+                cust_logger.info(f"create config by branch : {tmp}")
+                self.cache["continuousDeploymentConfig"][UUID][refName] = tmp
 
-            # commit_status_state.SUCCESSFUL
+            # todo : use commit_status_state.SUCCESSFUL
             if(curr_status_state == "SUCCESSFUL"):
                 #add it to the available cache
                 cust_logger.info(f"commit status state successful : {UUID}")
