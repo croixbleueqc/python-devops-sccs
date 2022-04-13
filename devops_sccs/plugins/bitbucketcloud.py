@@ -159,12 +159,14 @@ class BitbucketCloud(Sccs):
         """
         cust_logger = logging.getLogger("aiohttp.access") 
         cust_logger.info("handle commit status fct")
+        cust_logger.info(f"commit status enum sucessfull : {commit_status_state.SUCCESSFUL} and progress: {commit_status_state.INPROGRESS}")
         cust_logger.info(f"info: {response_json['commit_status']}")
-        repoName=response_json['commit_status']['repository']['name']
-        cust_logger.info(f"list env available : {self.cache['continuousDeploymentConfigAvailable'][repoName]}")
         cust_logger.info(f"list branch accepted : {self.cd_branches_accepted}")
         
-        if(response_json["commit_status"]["refname"] in self.cd_branches_accepted):
+        repoName=response_json['commit_status']['repository']['name']
+        refName=response_json["commit_status"]["refname"]
+        
+        if(refName in self.cd_branches_accepted):
             cust_logger.info("refname in version available")
             
             curr_status_state = response_json["commit_status"]["state"]
@@ -173,14 +175,15 @@ class BitbucketCloud(Sccs):
             build_nb = re.search("/(\d+)$",response_json["commit_status"]["url"]).group(1)
             cust_logger.info(f"build_nb : {build_nb}")
             
-            env = self.cd_environments[self.cd_branches_accepted.index(response_json["commit_status"]["refname"])]
+            env = self.cd_environments[self.cd_branches_accepted.index(refName)]
             if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
                 cust_logger.info("commit status created")
-                self.cache["continuousDeploymentConfig"][UUID][env] = self._create_continuous_deployment_config_by_branch(response_json["repository"]["name"],build_nb,response_json["commit_status"]["refname"],env)
+                self.cache["continuousDeploymentConfig"][UUID][refName] = self._create_continuous_deployment_config_by_branch(repoName,build_nb,refName,env)
 
-            if(curr_status_state == commit_status_state.SUCCESSFUL):
+            # commit_status_state.SUCCESSFUL
+            if(curr_status_state == "SUCCESSFUL"):
                 #add it to the available cache
-                cust_logger.info(f"commit status state successful : {response_json['commit_status']}")
+                cust_logger.info(f"commit status state successful")
                 local_available = await self.cache["available"][UUID]
 
                 i = 0
@@ -199,7 +202,7 @@ class BitbucketCloud(Sccs):
                         local_available.insert(i,available)
                         break
                         
-                cust_logger.info("self cache set")
+                cust_logger.info(f"self cache set uuid : {UUID} with value {local_available}")
                 self.cache["available"][UUID] = local_available
         else:
             cust_logger.info(f"not in cd_version_available : {self.cd_versions_available}")
