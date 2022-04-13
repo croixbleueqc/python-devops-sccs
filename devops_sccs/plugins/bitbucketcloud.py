@@ -158,6 +158,8 @@ class BitbucketCloud(Sccs):
         This hook is only called on the Master branch for handling compilation events  
         """
         cust_logger = logging.getLogger("aiohttp.access") 
+        cust_logger.info("handle commit status fct")
+        cust_logger.info(f"info: {response_json['commit_status']}")
         
         if(response_json["commit_status"]["refname"] in self.cd_versions_available):
             cust_logger.info("refname in version available")
@@ -194,6 +196,8 @@ class BitbucketCloud(Sccs):
                         
                 cust_logger.info("self cache set")
                 self.cache["available"][UUID] = local_available
+        else:
+            cust_logger.info(f"not in cd_version_available : {self.cd_versions_available}")
 
     async def cleanup(self):
         if hasattr(self, 'watcher'):
