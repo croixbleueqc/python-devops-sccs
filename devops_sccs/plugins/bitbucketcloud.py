@@ -160,14 +160,19 @@ class BitbucketCloud(Sccs):
         cust_logger = logging.getLogger("aiohttp.access") 
         cust_logger.info("handle commit status fct")
         cust_logger.info(f"info: {response_json['commit_status']}")
+        repoName=response_json['commit_status']['repository']['name']
+        cust_logger.info(f"list env available : {self.cache['continuousDeploymentConfigAvailable'][repoName]}")
+        cust_logger.info(f"list branch accepted : {self.cd_branches_accepted}")
         
-        if(response_json["commit_status"]["refname"] in self.cd_versions_available):
+        if(response_json["commit_status"]["refname"] in self.cd_branches_accepted):
             cust_logger.info("refname in version available")
             
             curr_status_state = response_json["commit_status"]["state"]
 
             #get the build number
             build_nb = re.search("/(\d+)$",response_json["commit_status"]["url"]).group(1)
+            cust_logger.info(f"build_nb : {build_nb}")
+            
             env = self.cd_environments[self.cd_branches_accepted.index(response_json["commit_status"]["refname"])]
             if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
                 cust_logger.info("commit status created")
@@ -452,6 +457,8 @@ class BitbucketCloud(Sccs):
         fetch the available environements for the specified repository.
         """
         self.__log_session(session)
+        cust_logger = logging.getLogger("aiohttp.access") 
+        cust_logger.info("_fetch_continuous_deployment_environments_available")
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             repo = bitbucket.repositories.repo_slug(self.team, repository)
 
@@ -469,7 +476,7 @@ class BitbucketCloud(Sccs):
 
             # Ordered availables and remove index
             response = [env for env, _ in sorted(availables, key=lambda available: available[1])]
-
+            cust_logger.info("_fetch_continuous_deployment_environments_available : {response}")
             return response
 
     async def get_continuous_deployment_environments_available(self, session, repository, args) -> list:
