@@ -180,7 +180,7 @@ class BitbucketCloud(Sccs):
                 tmp = self._create_continuous_deployment_config_by_branch(repoName,build_nb,refName,env)
                 cust_logger.info(f"create config by branch : {tmp}")
                 
-                cacheConfig= await self.cache["continuousDeploymentConfig"][UUID]
+                cacheConfig = await self.cache["continuousDeploymentConfig"][UUID]
                 cust_logger.info(f"cache config for {UUID} is : {cacheConfig}")
                 cacheConfig[refName] = tmp
                 self.cache["continuousDeploymentConfig"][UUID] = cacheConfig
@@ -194,7 +194,7 @@ class BitbucketCloud(Sccs):
                 # cust_logger.info(f"local available : {local_available}")
                 i = 0
                 for conf in local_available:
-                    cust_logger.info(f'conf is : {conf}')
+                    cust_logger.info(f"conf build is : {conf.build}")
                     if conf.build > build_nb :
                         i+=1
                     elif conf.build == build_nb:
@@ -505,10 +505,12 @@ class BitbucketCloud(Sccs):
 
             response = []
 
+            cust_logger.info(f"list cd version available : {self.cd_versions_available}")
+            
             async for pipeline in repo.pipelines().get(filter='sort=-created_on'):
                 if pipeline.target.ref_name in self.cd_versions_available and \
                    pipeline.state.result.name == "SUCCESSFUL":
-                    cust_logger.info(f"pipeline available : {pipeline}")
+                    # cust_logger.info(f"pipeline available : {pipeline}")
                     available = typing_cd.Available(hash((repository, pipeline.build_number)))
                     available.build = pipeline.build_number
                     available.version = pipeline.target.commit.hash
@@ -516,8 +518,8 @@ class BitbucketCloud(Sccs):
                     
                     response.append(available)
 
-                else:
-                    cust_logger.info(f"pipeline not available : {pipeline}")
+                # else:
+                    # cust_logger.info(f"pipeline not available : {pipeline}")
                     
             cust_logger.info(f"version on repo : {repository} is : {response}")
             return response
