@@ -189,21 +189,46 @@ class BitbucketCloud(Sccs):
             if(curr_status_state == "SUCCESSFUL"):
                 #add it to the available cache
                 cust_logger.info(f"commit SUCCESSFUL : {UUID}")
+                
+                # result=[]
+                # i = 0
+                # async for conf in self.cache["available"][UUID]:
+                #     tmpbuild=str(conf.build)
+                #     cust_logger.info(f"async conf build is : {tmpbuild}")
+                #     result.append(conf)
+                    
+                #     if conf.build > int(build_nb) :
+                #         i+=1
+                #     elif conf.build == int(build_nb):
+                #         break
+                #     else:
+                #         version = response_json["commit_status"]["commit"]["hash"]
+                
+                #         available = typing_cd.Available(hash((UUID,build_nb)))
+                #         available.build = build_nb
+                #         available.version = version
+
+                #         result.insert(i,available)
+                #         break
+                
+                # cust_logger.info(f"async self cache set uuid : {UUID} with value {result}")
+                
                 local_available = await self.cache["available"][UUID]
 
                 # cust_logger.info(f"local available : {local_available}")
                 i = 0
                 for conf in local_available:
-                    cust_logger.info(f"conf build is : {conf.build}")
-                    if conf.build > build_nb :
+                    tmpbuild=str(conf.build)
+                    cust_logger.info(f"conf build is : {tmpbuild}")
+                    if conf.build > int(build_nb) :
                         i+=1
-                    elif conf.build == build_nb:
+                    elif conf.build == int(build_nb):
                         break
                     else:
                         version = response_json["commit_status"]["commit"]["hash"]
                 
                         available = typing_cd.Available(hash((UUID,build_nb)))
-                        available.build = build_nb
+                        available.build = int(build_nb)
                         available.version = version
 
                         local_available.insert(i,available)
