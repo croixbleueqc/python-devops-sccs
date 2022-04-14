@@ -159,15 +159,14 @@ class BitbucketCloud(Sccs):
         """
         cust_logger = logging.getLogger("aiohttp.access") 
         cust_logger.info("handle commit status fct")
-        cust_logger.info(f"commit status enum sucessfull : {commit_status_state.SUCCESSFUL} and progress: {commit_status_state.INPROGRESS}")
         cust_logger.info(f"info: {response_json['commit_status']}")
-        cust_logger.info(f"list branch accepted : {self.cd_branches_accepted}")
+        # cust_logger.info(f"list branch accepted : {self.cd_branches_accepted}")
         
         repoName=response_json['commit_status']['repository']['name']
         refName=response_json["commit_status"]["refname"]
         
         if(refName in self.cd_branches_accepted):
-            cust_logger.info("refname in version available")
+            # cust_logger.info("refname in version available")
             
             curr_status_state = response_json["commit_status"]["state"]
 
@@ -177,20 +176,25 @@ class BitbucketCloud(Sccs):
             
             env = self.cd_environments[self.cd_branches_accepted.index(refName)]
             if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
-                cust_logger.info("commit status created")
+                cust_logger.info(f"commit CREATED : {UUID}")
                 tmp = self._create_continuous_deployment_config_by_branch(repoName,build_nb,refName,env)
                 cust_logger.info(f"create config by branch : {tmp}")
-                self.cache["continuousDeploymentConfig"][UUID][refName] = tmp
+                
+                cacheConfig= await self.cache["continuousDeploymentConfig"][UUID]
+                cust_logger.info(f"cache config for {UUID} is : {cacheConfig}")
+                cacheConfig[refName] = tmp
+                self.cache["continuousDeploymentConfig"][UUID] = cacheConfig
 
             # todo : use commit_status_state.SUCCESSFUL
             if(curr_status_state == "SUCCESSFUL"):
                 #add it to the available cache
-                cust_logger.info(f"commit status state successful : {UUID}")
+                cust_logger.info(f"commit SUCCESSFUL : {UUID}")
                 local_available = await self.cache["available"][UUID]
 
-                cust_logger.info(f"local available : {local_available}")
+                # cust_logger.info(f"local available : {local_available}")
                 i = 0
                 for conf in local_available:
+                    cust_logger.info(f'conf is : {conf}')
                     if conf.build > build_nb :
                         i+=1
                     elif conf.build == build_nb:
