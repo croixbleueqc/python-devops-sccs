@@ -187,7 +187,7 @@ class Watcher(object):
             logging.warning("watcher: already started !")
             return
 
-        logging.info("starting !")
+        logging.info("starting watcher !")
 
         async def async_start():
             try:
