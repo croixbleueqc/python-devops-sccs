@@ -108,7 +108,6 @@ class Core(object):
 
         builtin = plugins_config.get("builtin", {})
         config = plugins_config.get("config", {})
-
         if builtin.get("demo", True):
             plugin_id, plugin = plugin_demo.init_plugin()
             await self.register(plugin_id, plugin, config.get("demo"))
@@ -122,27 +121,34 @@ class Core(object):
         """
 
         external_path = plugins_config.get("external")
-
-        if external_path is None:
-            return
-
-        sys.path.append(external_path)
-
         config = plugins_config.get("config", {})
         
-        for file in glob.glob(os.path.join(external_path, "*.py")):
+        if os.path.isdir(external_path):
+            sys.path.append(external_path)
+            await self.register_plugins_in_folder(external_path, config)
+        else:
+            dev_external_path=os.getcwd() + "/plugins/devops_sccs"
+            if os.path.isdir(dev_external_path):
+                sys.path.append(dev_external_path)
+                await self.register_plugins_in_folder(dev_external_path, config)
+        
+                
+        return True
+    
+    async def register_plugins_in_folder(self, folder_path, config):
+        for file in glob.glob(os.path.join(folder_path, "*.py")):
             spec = importlib.util.spec_from_file_location("", file)
             mod = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(mod)
 
             plugin_id, plugin = mod.init_plugin()
             await self.register(plugin_id, plugin, config.get(plugin_id))
-        return True 
+
     async def register(self, plugin_id, plugin, config):
         """Register a plugin to make it available"""
         if plugin_id in self.plugins:
             raise PluginAlreadyRegistered(plugin_id)
-
+        
         await plugin.init(self, config)
         self.plugins[plugin_id] = plugin
         
