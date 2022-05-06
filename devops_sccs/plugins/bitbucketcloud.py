@@ -308,7 +308,7 @@ class BitbucketCloud(Sccs):
 
     async def get_repositories(self, session, args) -> list:
         """see plugin.py"""
-
+        logging.debug(f'get user permission repositories')
         result = []
         async with self.bitbucket_session(session) as bitbucket:
             async for permission_repo in bitbucket.user.permissions.repositories.get():
@@ -434,7 +434,7 @@ class BitbucketCloud(Sccs):
         Get the deployed environment with the current version/tag
         """
         results = await self.cache["continuousDeploymentConfig"][repository]
-        logging.debug(f'-- get_continuous_deployment_config : {results}')
+        logging.debug(f'get_continuous_deployment_config : {results}')
         return results  
 
     async def _fetch_continuous_deployment_environments_available(self, repository,session=None) -> list:
@@ -474,7 +474,7 @@ class BitbucketCloud(Sccs):
         
     async def get_continuous_deployment_environments_available(self, session, repository, args) -> list:
         result = await self.cache["continuousDeploymentConfigAvailable"][repository]
-        logging.debug(f"------ get_continuous_deployment_environments_available on repo : {repository} --- result : {result}")
+        logging.debug(f"get_continuous_deployment_environments_available on repo : {repository} --- result : {result}")
         return result
 
 

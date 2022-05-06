@@ -58,7 +58,7 @@ class Context(object):
         """
         return await self.plugin.get_repositories(self.session, args)
 
-    async def watch_repositories(self, args=None, poll_interval=10):
+    async def watch_repositories(self, args=None, poll_interval=3600):
         """Watch for get_repositories"""
 
         return self._core.scheduler.watch(
