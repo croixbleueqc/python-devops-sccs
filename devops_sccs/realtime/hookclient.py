@@ -151,7 +151,6 @@ class HookClient(object):
                         event = Event()
                         event.type_ = EventType.MODIFIED
                     else:
-                        logging.info("identical !")
                         continue
 
                     event.value = value
