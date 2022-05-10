@@ -163,7 +163,7 @@ class BitbucketCloud(Sccs):
         logging.info("handle commit status fct")
         branchName=responseJson["commit_status"]["refname"]
 
-        if(branchName not in self.cd_branches_accepted):
+        if branchName not in self.cd_branches_accepted:
             logging.debug(f"branch name : {branchName} not in environment accepted : {self.cd_versions_available}")
             return
             
