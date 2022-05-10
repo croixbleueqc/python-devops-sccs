@@ -140,7 +140,7 @@ class BitbucketCloud(Sccs):
         changesMatter = False
         for change in responseJson["push"]["changes"]:
             branchName = change["new"]["name"]
-            if(branchName in self.cd_branches_accepted):
+            if branchName in self.cd_branches_accepted:
                 changesMatter=True
                 break
                         
