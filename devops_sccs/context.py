@@ -91,7 +91,7 @@ class Context(object):
         """
         return await self.plugin.get_continuous_deployment_config(self.session, repository, environments, args)
 
-    async def watch_continuous_deployment_config(self, repository, environments=None, args=None, poll_interval=5400):
+    async def watch_continuous_deployment_config(self, repository, environments=None, args=None, poll_interval=10):
         """Watch for get_continuous_deployment_config"""
 
         await self.accesscontrol(repository, Actions.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
@@ -136,7 +136,7 @@ class Context(object):
         """
         return await self.plugin.get_continuous_deployment_versions_available(self.session, repository, args)
 
-    async def watch_continuous_deployment_versions_available(self, repository, args=None, poll_interval=5400):
+    async def watch_continuous_deployment_versions_available(self, repository, args=None, poll_interval=10):
         """watch for get_continuous_deployment_versions_available"""
 
         await self.accesscontrol(repository, Actions.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
@@ -170,7 +170,7 @@ class Context(object):
         """
         return await self.plugin.get_continuous_deployment_environments_available(self.session, repository, args)
 
-    async def watch_continuous_deployment_environments_available(self, repository, args=None, poll_interval=5400):
+    async def watch_continuous_deployment_environments_available(self, repository, args=None, poll_interval=10):
         """watch for get_continuous_deployment_environments_available"""
 
         await self.accesscontrol(repository, Actions.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE)
