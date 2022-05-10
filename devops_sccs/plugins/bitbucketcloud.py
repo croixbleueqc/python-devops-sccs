@@ -167,7 +167,7 @@ class BitbucketCloud(Sccs):
             logging.debug(f"branch name : {branchName} not in environment accepted : {self.cd_versions_available}")
             return
             
-        if(event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED):
+        if event ==  HookEvent_t.REPO_COMMIT_STATUS_CREATED:
             logging.debug(f"REPO_COMMIT_STATUS_CREATED : {repoName}")
                 
             self.hookWatcher = Bitbucket()
