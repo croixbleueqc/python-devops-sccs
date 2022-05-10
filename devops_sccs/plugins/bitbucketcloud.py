@@ -422,8 +422,8 @@ class BitbucketCloud(Sccs):
         task_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         response = {}
-        for result in task_results:
-            response[result[0]]=result[1]
+        for [branch, results] in task_results:
+            response[branch] = results
         
         results = [response[branch] for branch in response]
         logging.debug(f"_fetch_continuous_deployment_config for {repository} result is : {results}")
