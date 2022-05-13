@@ -83,7 +83,8 @@ class Core(object):
 
         val = await self.load_external_plugins(config.get("plugins", {}))
         
-        if self.enableHook & val :
+        if self.enableHook and val :
+
             self.hookServer.lock.release()
             await self.hookServer.start_server()
 
