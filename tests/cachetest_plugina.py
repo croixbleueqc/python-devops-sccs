@@ -10,7 +10,7 @@ class func:
     def __init__(self,func):
         self.func = func
     async def run(self,a,b):
-        return self.func(a,b)
+        return await self.func(a,b)
 #analog to bitbucket cloud
 class CacheTest_PluginA(CacheTest_PluginBase):
     def init(self, test_server):
