@@ -16,7 +16,7 @@ from devops_sccs.cache import *
 app_test = FastAPI()
 
 #analog to hook server
-class CacheTest_Server(object):
+class CacheTest_Server:
     manager = multiprocessing.Manager()
     def __init__(self) :
         pass   
