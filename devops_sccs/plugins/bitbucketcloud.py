@@ -44,7 +44,7 @@ def init_plugin():
 
 class BitbucketCloud(Sccs):
     hook_path = f"/{PLUGIN_NAME}/hooks/repo"
-    _instance = None
+    _instance: BitbucketCloud | None = None
 
     async def init(self, core, args):
         """

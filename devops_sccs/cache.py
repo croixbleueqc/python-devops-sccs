@@ -15,15 +15,37 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 from collections import UserDict
-from multiprocessing import managers
 import logging
 import multiprocessing
-import threading
-import traceback
+from threading import Lock
+from typing import Any
 
 
 class Cache(UserDict):
     """A simple cache to help reduce expensive API calls."""
+
+    def init(self):
+        self._lock = Lock()
+
+    def __getitem__(self, key: str) -> Any:
+        with self._lock:
+            return super().__getitem__(key)
+
+    def __setitem__(self, key: str, item: Any) -> None:
+        with self._lock:
+            return super().__setitem__(key, item)
+
+    def __delitem__(self, key: str) -> None:
+        with self._lock:
+            return super().__delitem__(key)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return super().__len__()
+
+    def __contains__(self, key: object) -> bool:
+        with self._lock:
+            return super().__contains__(key)
 
 
 class AsyncCache(object):
