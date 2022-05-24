@@ -76,40 +76,40 @@ class BitbucketCloud(Sccs):
             Actions.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE: Permissions.READ_CAPABILITIES,
         }
 
-        if hasattr(core, "hookServer"):
-            if not hasattr(self, "cache"):
-                "create the nessesary caches"
-                # self.cache = core.hookServer.create_dict()
-                self.cache = {}
-                self.cache["repo"] = core.hookServer.create_cache(
-                    self.get_repository, "repository", session=None
-                )
-                self.cache["continuousDeploymentConfig"] = core.hookServer.create_cache(
-                    self._fetch_continuous_deployment_config,
-                    "repository",
-                    session={
-                        "user": {
-                            "user": args["watcher"]["user"],
-                            "apikey": args["watcher"]["pwd"],
-                        }
-                    },
-                )
-                self.cache[
-                    "continuousDeploymentConfigAvailable"
-                ] = core.hookServer.create_cache(
-                    self._fetch_continuous_deployment_environments_available,
-                    "repository",
-                    session={
-                        "user": {
-                            "user": args["watcher"]["user"],
-                            "apikey": args["watcher"]["pwd"],
-                        }
-                    },
-                )
-                self.cache["available"] = core.hookServer.create_cache(
-                    self._fetch_continuous_deployment_versions_available, "repository"
-                )
-            self.__routing_init()
+        # if hasattr(core, "hookServer"):
+        #     if not hasattr(self, "cache"):
+        #         "create the nessesary caches"
+        #         # self.cache = core.hookServer.create_dict()
+        #         self.cache = {}
+        #         self.cache["repo"] = core.hookServer.create_cache(
+        #             self.get_repository, "repository", session=None
+        #         )
+        #         self.cache["continuousDeploymentConfig"] = core.hookServer.create_cache(
+        #             self._fetch_continuous_deployment_config,
+        #             "repository",
+        #             session={
+        #                 "user": {
+        #                     "user": args["watcher"]["user"],
+        #                     "apikey": args["watcher"]["pwd"],
+        #                 }
+        #             },
+        #         )
+        #         self.cache[
+        #             "continuousDeploymentConfigAvailable"
+        #         ] = core.hookServer.create_cache(
+        #             self._fetch_continuous_deployment_environments_available,
+        #             "repository",
+        #             session={
+        #                 "user": {
+        #                     "user": args["watcher"]["user"],
+        #                     "apikey": args["watcher"]["pwd"],
+        #                 }
+        #             },
+        #         )
+        #         self.cache["available"] = core.hookServer.create_cache(
+        #             self._fetch_continuous_deployment_versions_available, "repository"
+        #         )
+        #     self.__routing_init()
         BitbucketCloud.__instance = self
 
     def __routing_init(self):
