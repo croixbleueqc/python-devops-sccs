@@ -56,10 +56,10 @@ class BitbucketCloud(Sccs):
 
         self.team = args["team"]
 
-        self.cd_environments = args["continous_deployment"]["environments"]
+        self.cd_environments = args["continuous_deployment"]["environments"]
         self.cd_branches_accepted = [env["branch"] for env in self.cd_environments]
-        self.cd_pullrequest_tag = args["continous_deployment"]["pullrequest"]["tag"]
-        self.cd_versions_available = args["continous_deployment"]["pipeline"][
+        self.cd_pullrequest_tag = args["continuous_deployment"]["pullrequest"]["tag"]
+        self.cd_versions_available = args["continuous_deployment"]["pipeline"][
             "versions_available"
         ]
 
