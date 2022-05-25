@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from .accesscontrol import Actions
+from .accesscontrol import Action
 
 
 class Context(object):
@@ -104,7 +104,7 @@ class Context(object):
     ):
         """Watch for get_continuous_deployment_config"""
 
-        await self.accesscontrol(repository, Actions.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
+        await self.accesscontrol(repository, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
 
         def filtering_by_environment(event):
             return not environments or event.value.environment in environments
@@ -123,7 +123,7 @@ class Context(object):
         self, repository, environments=None, args=None
     ):
         """get and update for get_continuous_deployment_config"""
-        await self.accesscontrol(repository, Actions.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
+        await self.accesscontrol(repository, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
 
         def filtering_by_environment(event):
             return not environments or event.value.environment in environments
@@ -152,7 +152,7 @@ class Context(object):
         """watch for get_continuous_deployment_versions_available"""
 
         await self.accesscontrol(
-            repository, Actions.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE
+            repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE
         )
 
         return self._core.scheduler.watch(
@@ -198,7 +198,7 @@ class Context(object):
         """watch for get_continuous_deployment_environments_available"""
 
         await self.accesscontrol(
-            repository, Actions.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
+            repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
         )
 
         return self._core.scheduler.watch(

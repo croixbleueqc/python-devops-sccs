@@ -16,6 +16,7 @@ import asyncio
 import logging
 import time
 import inspect
+from typing import Dict
 
 from fastapi import Request
 from contextlib import asynccontextmanager
@@ -28,7 +29,7 @@ from aiobitbucket.typing.webhooks.webhook import event_t as HookEvent_t
 from ..realtime.hookserver import app_sccs
 from ..plugin import Sccs
 from ..errors import SccsException
-from ..accesscontrol import AccessForbidden, Actions, Permissions
+from ..accesscontrol import AccessForbidden, Action, Permission
 from ..utils import cd as utils_cd
 from ..typing import cd as typing_cd
 from ..typing import repositories as typing_repo
@@ -70,10 +71,10 @@ class BitbucketCloud(Sccs):
             self.watcher = Bitbucket()
             self.watcher.open_basic_session(self.watcherUser, self.watcherPwd)
 
-        self.accesscontrol_rules = {
-            Actions.WATCH_CONTINOUS_DEPLOYMENT_CONFIG: Permissions.READ_CAPABILITIES,
-            Actions.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE: Permissions.READ_CAPABILITIES,
-            Actions.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE: Permissions.READ_CAPABILITIES,
+        self.accesscontrol_rules: Dict[int, list[str]] = {
+            Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG: Permission.READ_CAPABILITIES,
+            Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE: Permission.READ_CAPABILITIES,
+            Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE: Permission.READ_CAPABILITIES,
         }
 
         # if hasattr(core, "hookServer"):
