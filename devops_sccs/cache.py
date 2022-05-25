@@ -14,14 +14,15 @@
 
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
-from collections import UserDict
+
 import logging
 import multiprocessing
+from collections import UserDict
 from threading import Lock
 from typing import Any
 
 
-class Cache(UserDict):
+class ThreadsafeCache(UserDict[str, Any]):
     """A simple cache to help reduce expensive API calls."""
 
     def init(self):
