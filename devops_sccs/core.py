@@ -65,6 +65,8 @@ class Core(object):
         self.plugins = {}
         self.scheduler = Scheduler()
         self.provision: Provision
+        self.enableHook: bool
+        self.hookServer: HookServer
 
     @classmethod
     async def create(cls, config=None):
@@ -79,30 +81,29 @@ class Core(object):
                 templates=config["provision"].get("templates", {}),
             )
 
-        # self.enableHook = config.get("hook_server") is not None
-        # if self.enableHook:
-        #     self.hookServer = HookServer(config["hook_server"])
-        #     # we need to lock it up here , otherwise the endpoints won't register.
-        #     await self.hookServer.lock.acquire()
+        self.enableHook = config.get("hook_server") is not None
+        if self.enableHook:
+            self.hookServer = HookServer(config["hook_server"])
+            # we need to lock it up here , otherwise the endpoints won't register.
+            await self.hookServer.lock.acquire()
 
         val = await self.load_builtin_plugins(config.get("plugins", {}))
 
         val = await self.load_external_plugins(config.get("plugins", {}))
 
-        # if self.enableHook and val:
-        #
-        #     self.hookServer.lock.release()
-        #     await self.hookServer.start_server()
-        #
+        if self.enableHook and val:
+            self.hookServer.lock.release()
+            await self.hookServer.start_server()
+
         return self
 
     async def cleanup(self):
         if self.provision is not None:
             self.provision.cleanup()
 
-        # if self.enableHook:
-        #     self.hookServer.stop_server()
-        #
+        if self.enableHook:
+            self.hookServer.stop_server()
+
         for plugin_id in list(self.plugins.keys()):
             await self.unregister(plugin_id)
 

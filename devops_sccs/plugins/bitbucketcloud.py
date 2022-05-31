@@ -18,14 +18,13 @@ import time
 import inspect
 from typing import Dict
 
-from fastapi import Request
 from contextlib import asynccontextmanager
 
 from aiobitbucket.bitbucket import Bitbucket
 from aiobitbucket.typing.refs import Branch
 from aiobitbucket.apis.repositories.repository import RepoSlug
 from aiobitbucket.errors import NetworkNotFound
-from aiobitbucket.typing.webhooks.webhook import event_t as HookEvent_t
+from fastapi import Request
 from ..realtime.hookserver import app_sccs
 from ..plugin import Sccs
 from ..errors import SccsException
@@ -113,129 +112,127 @@ class BitbucketCloud(Sccs):
         #     self.__routing_init()
         BitbucketCloud.__instance = self
 
-    def __routing_init(self):
-        """
-        Initialise all the nessesary paths for hooks.
-        """
+    # def __routing_init(self):
+    #     """
+    #     Initialise all the nessesary paths for hooks.
+    #     """
 
-        @app_sccs.post(
-            self.hook_path,
-        )
-        async def __handle_Hooks_Repo(request: Request):
-            """
-            handle the repo endpoint.
-            """
-            logging.info("__handle_Hooks_Repo request")
-            event = HookEvent_t(request.headers["X-Event-Key"])
-            responseJson = await request.json()
+    #     @app_sccs.post(self.hook_path)
+    #     async def __handle_Hooks_Repo(request: Request):
+    #         """
+    #         handle the repo endpoint.
+    #         """
+    #         logging.info("__handle_Hooks_Repo request")
+    #         event = HookEvent_t(request.headers["X-Event-Key"])
+    #         responseJson = await request.json()
 
-            repoName = responseJson["repository"]["name"]
+    #         repoName = responseJson["repository"]["name"]
 
-            if event == HookEvent_t.REPO_DELETED:
-                logging.info("__handle_delete_Repo")
-                self.__handle_delete_repo(repoName)
-            else:
-                Workspace = responseJson["repository"]["workspace"]["slug"]
+    #         if event == HookEvent_t.REPO_DELETED:
+    #             logging.info("__handle_delete_Repo")
+    #             self.__handle_delete_repo(repoName)
+    #         else:
+    #             Workspace = responseJson["repository"]["workspace"]["slug"]
 
-                self.cache["repo"][repoName] = RepoSlug(
-                    None,
-                    workspace_name=Workspace,
-                    repo_slug_name=responseJson["repository"]["name"],
-                    data=responseJson["repository"],
-                )
-                if event == HookEvent_t.REPO_PUSH:
-                    logging.info("skip __handle_push_Repo")
-                    await self.__handle_push(repoName, responseJson)
+    #             self.cache["repo"][repoName] = RepoSlug(
+    #                 None,
+    #                 workspace_name=Workspace,
+    #                 repo_slug_name=responseJson["repository"]["name"],
+    #                 data=responseJson["repository"],
+    #             )
+    #             if event == HookEvent_t.REPO_PUSH:
+    #                 logging.info("skip __handle_push_Repo")
+    #                 await self.__handle_push(repoName, responseJson)
 
-                elif (
-                    event == HookEvent_t.REPO_COMMIT_STATUS_CREATED
-                    or event == HookEvent_t.REPO_COMMIT_STATUS_UPDATED
-                ):
-                    logging.info("__handle_commit_status")
-                    await self.__handle_commit_status(repoName, event, responseJson)
+    #             elif (
+    #                 event == HookEvent_t.REPO_COMMIT_STATUS_CREATED
+    #                 or event == HookEvent_t.REPO_COMMIT_STATUS_UPDATED
+    #             ):
+    #                 logging.info("__handle_commit_status")
+    #                 await self.__handle_commit_status(repoName, event, responseJson)
 
-        return __handle_Hooks_Repo
+    #     return __handle_Hooks_Repo
 
-    def __handle_delete_repo(self, repoName):
-        for key in self.cache:
-            if repoName in self.cache[key]:
-                del self.cache[key][repoName]
+    # def __handle_delete_repo(self, repoName):
+    #     for key in self.cache:
+    #         if repoName in self.cache[key]:
+    #             del self.cache[key][repoName]
 
-    async def __handle_push(self, repoName, responseJson):
-        """
-        This hook is called on a branch commit
-        """
-        logging.info("handle push status fct")
+    # async def __handle_push(self, repoName, responseJson):
+    #     """
+    #     This hook is called on a branch commit
+    #     """
+    #     logging.info("handle push status fct")
 
-        changesMatter = False
-        for change in responseJson["push"]["changes"]:
-            branchName = change["new"]["name"]
-            if branchName in self.cd_branches_accepted:
-                changesMatter = True
-                break
+    #     changesMatter = False
+    #     for change in responseJson["push"]["changes"]:
+    #         branchName = change["new"]["name"]
+    #         if branchName in self.cd_branches_accepted:
+    #             changesMatter = True
+    #             break
 
-        if not changesMatter:
-            logging.debug(
-                f"branch not in environment accepted : {self.cd_versions_available}"
-            )
-            return
+    #     if not changesMatter:
+    #         logging.debug(
+    #             f"branch not in environment accepted : {self.cd_versions_available}"
+    #         )
+    #         return
 
-        self.hookWatcher = Bitbucket()
-        self.hookWatcher.open_basic_session(self.watcherUser, self.watcherPwd)
-        newVersionDeployed = await self._fetch_bitbucket_continuous_deployment_config(
-            repoName, self.hookWatcher
-        )
-        await self.hookWatcher.close_session()
+    #     self.hookWatcher = Bitbucket()
+    #     self.hookWatcher.open_basic_session(self.watcherUser, self.watcherPwd)
+    #     newVersionDeployed = await self._fetch_bitbucket_continuous_deployment_config(
+    #         repoName, self.hookWatcher
+    #     )
+    #     await self.hookWatcher.close_session()
 
-        logging.info(f"handle push detected new version : {newVersionDeployed}")
-        self.cache["continuousDeploymentConfig"][repoName] = newVersionDeployed
+    #     logging.info(f"handle push detected new version : {newVersionDeployed}")
+    #     self.cache["continuousDeploymentConfig"][repoName] = newVersionDeployed
 
-    async def __handle_commit_status(self, repoName, event, responseJson):
-        """
-        This hook is called on pipeline status create or update
-        """
-        logging.info("handle commit status fct")
-        branchName = responseJson["commit_status"]["refname"]
+    # async def __handle_commit_status(self, repoName, event, responseJson):
+    #     """
+    #     This hook is called on pipeline status create or update
+    #     """
+    #     logging.info("handle commit status fct")
+    #     branchName = responseJson["commit_status"]["refname"]
 
-        if branchName not in self.cd_branches_accepted:
-            logging.debug(
-                f"branch name : {branchName} not in environment accepted : {self.cd_versions_available}"
-            )
-            return
+    #     if branchName not in self.cd_branches_accepted:
+    #         logging.debug(
+    #             f"branch name : {branchName} not in environment accepted : {self.cd_versions_available}"
+    #         )
+    #         return
 
-        if event == HookEvent_t.REPO_COMMIT_STATUS_CREATED:
-            logging.debug(f"REPO_COMMIT_STATUS_CREATED : {repoName}")
+    #     if event == HookEvent_t.REPO_COMMIT_STATUS_CREATED:
+    #         logging.debug(f"REPO_COMMIT_STATUS_CREATED : {repoName}")
 
-            self.hookWatcher = Bitbucket()
-            self.hookWatcher.open_basic_session(self.watcherUser, self.watcherPwd)
-            newVersionDeployed = (
-                await self._fetch_bitbucket_continuous_deployment_config(
-                    repoName, self.hookWatcher
-                )
-            )
-            await self.hookWatcher.close_session()
+    #         self.hookWatcher = Bitbucket()
+    #         self.hookWatcher.open_basic_session(self.watcherUser, self.watcherPwd)
+    #         newVersionDeployed = (
+    #             await self._fetch_bitbucket_continuous_deployment_config(
+    #                 repoName, self.hookWatcher
+    #             )
+    #         )
+    #         await self.hookWatcher.close_session()
 
-            logging.debug(
-                f"REPO_COMMIT_STATUS_CREATED, new deployment config : {newVersionDeployed}"
-            )
-            self.cache["continuousDeploymentConfig"][repoName] = newVersionDeployed
+    #         logging.debug(
+    #             f"REPO_COMMIT_STATUS_CREATED, new deployment config : {newVersionDeployed}"
+    #         )
+    #         self.cache["continuousDeploymentConfig"][repoName] = newVersionDeployed
 
-        elif event == HookEvent_t.REPO_COMMIT_STATUS_UPDATED:
-            logging.debug(f"REPO_COMMIT_STATUS_UPDATED : {repoName}")
+    #     elif event == HookEvent_t.REPO_COMMIT_STATUS_UPDATED:
+    #         logging.debug(f"REPO_COMMIT_STATUS_UPDATED : {repoName}")
 
-            self.hookWatcher = Bitbucket()
-            self.hookWatcher.open_basic_session(self.watcherUser, self.watcherPwd)
-            version_available = (
-                await self._fetch_bitbucket_continuous_deployment_versions_available(
-                    repoName, self.hookWatcher
-                )
-            )
-            await self.hookWatcher.close_session()
+    #         self.hookWatcher = Bitbucket()
+    #         self.hookWatcher.open_basic_session(self.watcherUser, self.watcherPwd)
+    #         version_available = (
+    #             await self._fetch_bitbucket_continuous_deployment_versions_available(
+    #                 repoName, self.hookWatcher
+    #             )
+    #         )
+    #         await self.hookWatcher.close_session()
 
-            logging.debug(
-                f"REPO_COMMIT_STATUS_UPDATED, new version available : {version_available}"
-            )
-            self.cache["available"][repoName] = version_available
+    #         logging.debug(
+    #             f"REPO_COMMIT_STATUS_UPDATED, new version available : {version_available}"
+    #         )
+    #         self.cache["available"][repoName] = version_available
 
     async def cleanup(self):
         if hasattr(self, "watcher"):
@@ -244,8 +241,9 @@ class BitbucketCloud(Sccs):
             self.reset_cache()
 
     def reset_cache(self):
-        for key in self.cache:
-            self.cache[key].clear_cache()
+        pass
+        # for key in self.cache:
+        #     self.cache[key].clear_cache()
 
     def get_session_id(self, args):
         """see plugin.py"""
@@ -394,7 +392,7 @@ class BitbucketCloud(Sccs):
         version: str,
         branch: str,
         config: dict,
-        pullrequest: str = None,
+        pullrequest: str = "",
         buildStatus: str = "SUCCESSFUL",
     ) -> typing_cd.EnvironmentConfig:
         """
@@ -432,7 +430,7 @@ class BitbucketCloud(Sccs):
             raise NotImplementedError()
 
         trigger_config = config.get("trigger", {})
-        pullrequest_link = None
+        pullrequest_link = ""
         if trigger_config.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
             async for pullrequest in repo.pullrequests().get():
@@ -521,9 +519,10 @@ class BitbucketCloud(Sccs):
         """
         Get the deployed environment with the current version/tag
         """
-        results = await self.cache["continuousDeploymentConfig"][repository]
-        logging.debug(f"get_continuous_deployment_config : {results}")
-        return results
+        return {}
+        # results = await self.cache["continuousDeploymentConfig"][repository]
+        # logging.debug(f"get_continuous_deployment_config : {results}")
+        # return results
 
     async def _fetch_continuous_deployment_environments_available(
         self, repository, session=None
@@ -576,11 +575,12 @@ class BitbucketCloud(Sccs):
     async def get_continuous_deployment_environments_available(
         self, session, repository, args
     ) -> list:
-        result = await self.cache["continuousDeploymentConfigAvailable"][repository]
-        logging.debug(
-            f"get_continuous_deployment_environments_available on repo : {repository} --- result : {result}"
-        )
-        return result
+        return []
+        # result = await self.cache["continuousDeploymentConfigAvailable"][repository]
+        # logging.debug(
+        #     f"get_continuous_deployment_environments_available on repo : {repository} --- result : {result}"
+        # )
+        # return result
 
     async def _fetch_continuous_deployment_versions_available(
         self, repository, session=None
@@ -636,11 +636,12 @@ class BitbucketCloud(Sccs):
     async def get_continuous_deployment_versions_available(
         self, session, repository, args
     ) -> list:
-        result = await self.cache["available"][repository]
-        logging.debug(
-            f"get_continuous_deployment_versions_available for repo : {repository}"
-        )
-        return result
+        return []
+        # result = await self.cache["available"][repository]
+        # logging.debug(
+        #     f"get_continuous_deployment_versions_available for repo : {repository}"
+        # )
+        # return result
 
     async def trigger_continuous_deployment(
         self, session, repository, environment, version, args
@@ -726,25 +727,25 @@ class BitbucketCloud(Sccs):
                 branch if deploy_branch is None else deploy_branch.name,
             )
 
-            with self.cache["continuousDeploymentConfig"] as cache:
-                if deploy_branch is not None:
-                    # Continuous Deployment is done with a PR.
-                    pr = repo.pullrequests().new()
-                    pr.title = f"Ugrade {environment} {self.cd_pullrequest_tag}"
-                    pr.close_source_branch = True
-                    pr.source.branch.name = deploy_branch.name
-                    pr.destination.branch.name = branch
+            # with self.cache["continuousDeploymentConfig"] as cache:
+            #     if deploy_branch is not None:
+            #         # Continuous Deployment is done with a PR.
+            #         pr = repo.pullrequests().new()
+            #         pr.title = f"Ugrade {environment} {self.cd_pullrequest_tag}"
+            #         pr.close_source_branch = True
+            #         pr.source.branch.name = deploy_branch.name
+            #         pr.destination.branch.name = branch
 
-                    # race condition start here
-                    await pr.create()
-                    await pr.get()
-                    continuous_deployment.pullrequest = pr.links.html.href
-                else:
-                    # Continuous Deployment done
-                    continuous_deployment.version = version
+            #         # race condition start here
+            #         await pr.create()
+            #         await pr.get()
+            #         continuous_deployment.pullrequest = pr.links.html.href
+            #     else:
+            #         # Continuous Deployment done
+            #         continuous_deployment.version = version
 
-                # race condition finish after that statement.
-                cache[deploy_branch] = continuous_deployment
+            #     # race condition finish after that statement.
+            #     cache[deploy_branch] = continuous_deployment
 
             # Return the new configuration (new version or PR in progress)
             return continuous_deployment
