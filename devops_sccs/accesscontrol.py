@@ -22,7 +22,8 @@ Access Control module
 from enum import IntEnum
 from .errors import SccsException
 
-class Actions(IntEnum):
+
+class Action(IntEnum):
     GET_CONTINOUS_DEPLOYMENT_CONFIG = 0
     WATCH_CONTINOUS_DEPLOYMENT_CONFIG = 1
     GET_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE = 2
@@ -32,13 +33,15 @@ class Actions(IntEnum):
     GET_REPOSITORIES = 6
     WATCH_REPOSITORIES = 7
 
-class Permissions(object):
+
+class Permission(object):
     READ = "read"
     WRITE = "write"
     ADMIN = "admin"
 
     READ_CAPABILITIES = [READ, WRITE, ADMIN]
     WRITE_CAPABILITIES = [WRITE, ADMIN]
+
 
 class AccessForbidden(SccsException):
     def __init__(self, repository, action):
