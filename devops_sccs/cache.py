@@ -16,9 +16,9 @@
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 import logging
-import multiprocessing
 from collections import UserDict
 from threading import Lock
+import threading
 from typing import Any
 
 
@@ -54,8 +54,8 @@ class AsyncCache(object):
         self,
         data,
         lookup_func,
-        key_arg: str = None,
-        rlock=multiprocessing.RLock(),
+        key_arg: str = "",
+        rlock=threading.RLock(),
         **kwargs_func,
     ):
         """

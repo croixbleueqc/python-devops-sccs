@@ -3,7 +3,6 @@ import uvicorn
 from multiprocessing import Manager
 import logging
 import asyncio
-from ..cache import AsyncCache
 from fastapi import FastAPI
 import os
 import signal
@@ -45,15 +44,6 @@ class HookServer:
 
     def create_dict(self):
         return self.manager.dict()
-
-    def create_cache(self, lookup_func=None, key_arg=None, **kwargs_func):
-        return AsyncCache(
-            self.manager.dict(),
-            lookup_func,
-            key_arg,
-            self.manager.RLock(),
-            **kwargs_func
-        )
 
     def __del__(self):
 

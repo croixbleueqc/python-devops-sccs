@@ -22,19 +22,22 @@ Core provides abstraction and plugins support to communicate with different sour
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
+import glob
 import importlib.util
 import os
 import sys
-import glob
+from multiprocessing import Manager
 
 from devops_sccs.realtime.hookserver import HookServer
-from .errors import PluginNotRegistered, PluginAlreadyRegistered
-from .provision import Provision
+
+from .cache import AsyncCache
 from .context import Context
-from .realtime.scheduler import Scheduler
+from .errors import PluginAlreadyRegistered, PluginNotRegistered
 
 # Built-in plugins
 from .plugins import demo as plugin_demo
+from .provision import Provision
+from .realtime.scheduler import Scheduler
 
 
 class Core(object):
@@ -65,6 +68,7 @@ class Core(object):
         self.plugins = {}
         self.scheduler = Scheduler()
         self.provision: Provision
+        self.manager = Manager()
 
     @classmethod
     async def create(cls, config=None):
@@ -191,3 +195,12 @@ class Core(object):
     def context(self, plugin_id, args):
         """Controlled context to use in a with statement"""
         return Core.ControlledContext(self, plugin_id, args)
+
+    def create_cache(self, lookup_func=None, key_arg=None, **kwargs_func):
+        return AsyncCache(
+            self.manager.dict(),
+            lookup_func,
+            key_arg,
+            self.manager.RLock(),
+            **kwargs_func,
+        )
