@@ -188,9 +188,9 @@ class BitbucketCloud(Sccs):
                 self.cache_local_sessions.pop(session_id)
 
     @asynccontextmanager
-    async def bitbucket_session(self, session: Session | None, default_session={}):
+    async def bitbucket_session(self, session: Session | None, default_session=None):
 
-        if isinstance(session, Bitbucket):
+        if isinstance(session, type(Bitbucket)):
             yield session
             return
 

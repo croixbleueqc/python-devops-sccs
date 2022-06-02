@@ -17,8 +17,8 @@
 
 import logging
 from collections import UserDict
+import multiprocessing
 from threading import Lock
-import threading
 from typing import Any
 
 
@@ -54,8 +54,8 @@ class AsyncCache(object):
         self,
         data,
         lookup_func,
-        key_arg: str = "",
-        rlock=threading.RLock(),
+        key_arg: str = None,
+        rlock=multiprocessing.RLock(),
         **kwargs_func,
     ):
         """
