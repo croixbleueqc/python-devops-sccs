@@ -138,7 +138,7 @@ class Core(object):
             sys.path.append(external_path)
             await self.register_plugins_in_folder(external_path, config)
         else:
-            dev_external_path = f"{os.getcwd()}/plugins/devops_sccs"
+            dev_external_path = f"{os.getcwd()}/app/plugins/devops_sccs"
             if os.path.isdir(dev_external_path):
                 sys.path.append(dev_external_path)
                 await self.register_plugins_in_folder(dev_external_path, config)
@@ -195,7 +195,7 @@ class Core(object):
     def context(self, plugin_id, args):
         """Controlled context to use in a with statement"""
         return Core.ControlledContext(self, plugin_id, args)
-
+    
     def create_cache(self, lookup_func=None, key_arg=None, **kwargs_func):
         return AsyncCache(
             self.manager.dict(),
