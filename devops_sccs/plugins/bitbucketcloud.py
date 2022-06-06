@@ -391,8 +391,14 @@ class BitbucketCloud(Sccs):
         task_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         response = {}
-        for [branch, results] in task_results:
-            response[branch] = results
+        for task in task_results:
+            try:
+                [branch, results] = task
+                response[branch] = results
+            except AttributeError as e:
+                logging.error(e)
+            finally:
+                continue
 
         results = [response[branch] for branch in response]
         logging.debug(
