@@ -28,64 +28,34 @@ from ..utils import cd as utils_cd
 
 import hashlib
 
+
 class Demo(Sccs):
     async def init(self, core, args):
         # Mock few repositories with permissions
         self.FAKE_DATA = {
-            "test": {
-                "REPO_TEST_01": "READ",
-                "REPO_TEST_02": "ADMIN"
-            },
-            "test2": {
-                "REPO_TEST2_01": "WRITE"
-            }
+            "test": {"REPO_TEST_01": "READ", "REPO_TEST_02": "ADMIN"},
+            "test2": {"REPO_TEST2_01": "WRITE"},
         }
 
         # Mock Continuous Deployments for few repositories
         self.FAKE_CD = {
             "REPO_TEST_01": {
                 "availables": [
-                    {
-                        "build": "10",
-                        "version": "0.5"
-                    },
-                    {
-                        "build": "11",
-                        "version": "1.0"
-                    }
+                    {"build": "10", "version": "0.5"},
+                    {"build": "11", "version": "1.0"},
                 ],
                 "environments": [
-                    {
-                        "environment": "master",
-                        "version": "1.0",
-                        "readonly": True
-                    },
-                    {
-                        "environment": "development",
-                        "version": "0.5"
-                    }
-                ]
+                    {"environment": "master", "version": "1.0", "readonly": True},
+                    {"environment": "development", "version": "0.5"},
+                ],
             },
             "REPO_TEST_02": {
-                "availables": [
-                    {
-                        "build": "100",
-                        "version": "2.0"
-                    }
-                ],
+                "availables": [{"build": "100", "version": "2.0"}],
                 "environments": [
-                    {
-                        "environment": "master",
-                        "version": "2.0",
-                        "readonly": True
-                    },
-                    {
-                        "environment": "production",
-                        "version": "1.8",
-                        "readonly": True
-                    }
-                ]
-            }
+                    {"environment": "master", "version": "2.0", "readonly": True},
+                    {"environment": "production", "version": "1.8", "readonly": True},
+                ],
+            },
         }
 
     async def cleanup(self):
@@ -95,10 +65,7 @@ class Demo(Sccs):
         return hashlib.sha256(str(args).encode()).hexdigest()
 
     async def open_session(self, session_id, args):
-        return {
-            "user": args["user"],
-            "id": session_id
-            }
+        return {"user": args["user"], "id": session_id}
 
     async def close_session(self, session_id, session, args):
         pass
@@ -110,7 +77,7 @@ class Demo(Sccs):
 
         if user_data is None:
             return []
-        
+
         return list(user_data.keys())
 
     async def get_repository_permissions(self, session, repository, args):
@@ -129,9 +96,9 @@ class Demo(Sccs):
 
         if user_data is None:
             return []
-        
+
         return user_data
-    
+
     async def passthrough(self, session, request, args):
         if request == "echo":
             return f"Proprietary {request} request with args: {args}"
@@ -149,18 +116,23 @@ class Demo(Sccs):
 
         return config
 
-    async def trigger_continuous_deployment(self, session, repository, environment, version, args):
+    async def trigger_continuous_deployment(
+        self, session, repository, environment, version, args
+    ):
         user = session["user"]
         config = await self.get_continuous_deployment_config(session, repository, args)
 
         if config is None:
             utils_cd.trigger_not_supported(repository)
 
-        env_config, available_config = utils_cd.trigger_prepare(config, repository, environment, version)
+        env_config, available_config = utils_cd.trigger_prepare(
+            config, repository, environment, version
+        )
 
         env_config.version = available_config.version
 
         self.FAKE_CD[repository] = config.dumps()
+
 
 def init_plugin():
     return "demo", Demo()

@@ -26,12 +26,20 @@ import logging
 from .watcher import Watcher
 from .hookclient import HookClient
 
+
 class Scheduler(object):
     def __init__(self):
-        self.tasks={}
+        self.tasks = {}
         self.lock_tasks = asyncio.Lock()
 
-    async def watch(self, identity: tuple, poll_interval: int, func, filtering=lambda event: True, **kwargs):
+    async def watch(
+        self,
+        identity: tuple,
+        poll_interval: int,
+        func,
+        filtering=lambda event: True,
+        **kwargs,
+    ):
         """
         Run a new task or connect to an existing task
         """
@@ -76,7 +84,7 @@ class Scheduler(object):
                 if w.is_no_watcher():
                     logging.debug(f"scheduler: remove watcher {hex(wid)}")
                     self.tasks.pop(wid)
-    
+
     async def hook(self, identity: tuple, filtering=lambda event: True, **kwargs):
         """
         Run a new task or connect to an existing task

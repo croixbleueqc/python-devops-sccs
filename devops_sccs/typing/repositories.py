@@ -24,6 +24,7 @@ Define standard typing to manage continuous deployment
 from typing_engine.typing import Field
 from . import WatcherTyping2
 
+
 class Repository(WatcherTyping2):
     name = Field()
     permission = Field()

@@ -195,7 +195,7 @@ class Core(object):
     def context(self, plugin_id, args):
         """Controlled context to use in a with statement"""
         return Core.ControlledContext(self, plugin_id, args)
-    
+
     def create_cache(self, lookup_func=None, key_arg=None, **kwargs_func):
         return AsyncCache(
             self.manager.dict(),

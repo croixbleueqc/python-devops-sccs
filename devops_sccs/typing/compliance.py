@@ -24,10 +24,11 @@ Define standard typing to manage report, diverence, etc
 from typing_engine.typing import Typing2, Field
 from enum import Enum
 
+
 class CurrentExpected(Enum):
     SET = "set"
     UNSET = "unset"
-    MATCH  = "match"
+    MATCH = "match"
     UNMATCH = "unmatch"
     UNKNOWN = "unknown"
     AVAILABE = "available"
@@ -35,6 +36,7 @@ class CurrentExpected(Enum):
 
     def __str__(self):
         return self.value
+
 
 class Divergence(Typing2):
     rule = Field()
@@ -47,7 +49,12 @@ class Divergence(Typing2):
         if not isinstance(other, Divergence):
             return False
 
-        return self.rule == other.rule and str(self.current) == str(other.current) and str(self.expected) == str(other.expected)
+        return (
+            self.rule == other.rule
+            and str(self.current) == str(other.current)
+            and str(self.expected) == str(other.expected)
+        )
+
 
 class RepositoryDivergence(Typing2):
     name = Field()
@@ -61,16 +68,14 @@ class RepositoryDivergence(Typing2):
 
         return {
             "name": preload_data[0][0],
-            "divergences": preload_data[0][1]["divergences"]
+            "divergences": preload_data[0][1]["divergences"],
         }
 
     def post_dumps(self, raw, dump):
         # Change the structure to move name as the key
         name = dump.pop("name")
         divergences = dump.pop("divergences")
-        dump[name] = {
-            "divergences": divergences
-        }
+        dump[name] = {"divergences": divergences}
 
     def isDivergences(self):
         return len(self.divergences) != 0

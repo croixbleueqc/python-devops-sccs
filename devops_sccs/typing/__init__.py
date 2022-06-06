@@ -17,10 +17,12 @@
 
 from typing_engine.typing import Typing2
 
+
 class WatcherTyping2(Typing2):
     def __init__(self, key, data=None, parent=None):
         self.key = key
         Typing2.__init__(self, data=data, parent=parent)
+
 
 class HookTyping2(Typing2):
     def __init__(self, key, data=None, parent=None):

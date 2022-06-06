@@ -18,6 +18,7 @@
 from typing_engine.typing import Field
 from . import HookTyping2
 
+
 class Hook(HookTyping2):
     name = Field()
     event = Field()
@@ -27,4 +28,3 @@ class Hook(HookTyping2):
             return False
 
         return self.name == other.name
-

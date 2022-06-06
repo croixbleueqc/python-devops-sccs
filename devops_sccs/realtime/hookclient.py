@@ -29,14 +29,14 @@ from ..typing.hook import HookTyping2
 from ..typing.event import Event, EventType
 from ..errors import SccsException
 
-#Note : this is experimental code , WIP
+# Note : this is experimental code , WIP
 class HookClient(object):
     _undef = object()
 
     class CloseClientOnException(object):
         def __init__(self, exception):
             self.exception = exception
-        
+
         def get_exception(self):
             return self.exception
 
@@ -49,14 +49,14 @@ class HookClient(object):
         self.lock_clients = asyncio.Lock()
         self.accept_clients = True
 
-        # 
+        #
         self.event_poll = asyncio.Event()
 
         # Caching
         self.cache = OrderedDict()
 
         # function
-        
+
         self.func_kwargs = kwargs
         self.func = func
 
@@ -67,7 +67,7 @@ class HookClient(object):
         """
         Subscribe a client
         """
-        
+
         async with self.lock_clients:
             if not self.accept_clients:
                 raise SccsException("hookclient: can't accept new client !")
@@ -155,7 +155,7 @@ class HookClient(object):
 
                     event.value = value
                     event.key = value.key
-                    
+
                     # Update the cache
                     self.cache[event.key] = event.value
 

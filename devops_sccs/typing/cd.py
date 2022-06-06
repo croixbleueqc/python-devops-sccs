@@ -25,52 +25,48 @@ from typing_engine.typing import Field
 from enum import Enum
 from . import WatcherTyping2
 
+
 class EnvironmentConfig(WatcherTyping2):
     """
     Defines which version is deployed on a specific environment.
-    
+
     readonly field permit to know if we can trigger a continuous deployment for this environment
-    
+
     """
+
     environment = Field()
     version = Field()
     readonly = Field(instanciator=bool, default=False)
     pullrequest = Field()
-    
 
     def __eq__(self, other):
         if not isinstance(other, EnvironmentConfig):
             return False
-        
-        return self.environment == other.environment and \
-                self.version == other.version and \
-                self.readonly == other.readonly and \
-                self.pullrequest == other.pullrequest
+
+        return (
+            self.environment == other.environment
+            and self.version == other.version
+            and self.readonly == other.readonly
+            and self.pullrequest == other.pullrequest
+        )
 
     def __hash__(self):
-        return hash((
-            self.environment,
-            self.version,
-            self.readonly,
-            self.pullrequest
-        ))
+        return hash((self.environment, self.version, self.readonly, self.pullrequest))
+
 
 class Available(WatcherTyping2):
     """
     Defines an available deployment (typically generated from a pipeline) with a build number and an associated version.
     """
+
     build = Field()
     version = Field()
 
     def __eq__(self, other):
         if not isinstance(other, Available):
             return False
-        
-        return self.build == other.build and \
-                self.version == other.version
+
+        return self.build == other.build and self.version == other.version
 
     def __hash__(self):
-        return hash((
-            self.build,
-            self.version
-        ))
+        return hash((self.build, self.version))

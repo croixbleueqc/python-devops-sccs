@@ -19,16 +19,25 @@ Continuous Deployment Helper module
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from ..errors import TriggerCdNotSupported, TriggerCdReadOnly, TriggerCdEnvUnsupported, TriggerCdVersionUnsupported, TriggerCdVersionAlreadyDeployed
+from ..errors import (
+    TriggerCdNotSupported,
+    TriggerCdReadOnly,
+    TriggerCdEnvUnsupported,
+    TriggerCdVersionUnsupported,
+    TriggerCdVersionAlreadyDeployed,
+)
 
-def trigger_prepare(continuous_deployment, versions_available, repository, environment, version):
+
+def trigger_prepare(
+    continuous_deployment, versions_available, repository, environment, version
+):
     """
     Check conformity to trigger a deployment
     Extract involved configurations from the global config
 
     Args:
         continuous_deployment(typing.cd.EnvironmentConfig): The configuration
-        versions_available(list(typing.cd.Available)): List of versions available 
+        versions_available(list(typing.cd.Available)): List of versions available
         repository(str): the repository name
         environment(str): the environment (eg: production, development, qa, ...)
         version(str): version to deploy
@@ -48,6 +57,7 @@ def trigger_prepare(continuous_deployment, versions_available, repository, envir
             return continuous_deployment, available
 
     raise TriggerCdVersionUnsupported(repository, version)
+
 
 def trigger_not_supported(repository, environment):
     """Trigger Continuous Deployment is not supported for this repository/environment"""

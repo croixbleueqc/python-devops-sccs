@@ -24,17 +24,18 @@ Event triggered by the realtime module
 from typing_engine.typing import Typing2, Field
 from enum import Enum
 
+
 class EventType(Enum):
     ADDED = "ADDED"
     MODIFIED = "MODIFIED"
-    DELETED  = "DELETED"
+    DELETED = "DELETED"
     INFO = "INFO"
 
     def __str__(self):
         return self.value
 
+
 class Event(Typing2):
     key = Field()
     type_ = Field(instanciator=EventType).converter(dumps=str).mapping("type")
     value = Field()
-
