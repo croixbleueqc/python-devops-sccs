@@ -288,7 +288,7 @@ class BitbucketCloud(Sccs):
         env = typing_cd.EnvironmentConfig(hash((repository, branch)))
         env.version = version
         env.environment = config["name"]
-        trigger_config = config.get("trigger", {})
+        trigger_config = config.get("trigger", {}) or {}
         env.readonly = not trigger_config.get("enabled", True)
         if trigger_config.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
@@ -316,7 +316,7 @@ class BitbucketCloud(Sccs):
         else:
             raise NotImplementedError()
 
-        trigger_config = config.get("trigger", {})
+        trigger_config = config.get("trigger", {}) or {}
         pullrequest_link = None
         if trigger_config.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
@@ -392,13 +392,8 @@ class BitbucketCloud(Sccs):
 
         response = {}
         for task in task_results:
-            try:
-                [branch, results] = task
-                response[branch] = results
-            except AttributeError as e:
-                logging.error(e)
-            finally:
-                continue
+            [branch, results] = task
+            response[branch] = results
 
         results = [response[branch] for branch in response]
         logging.debug(
