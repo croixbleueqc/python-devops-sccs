@@ -652,6 +652,27 @@ class BitbucketCloud(Sccs):
 
             return repo
 
+    async def create_webhook_subscription(
+        self,
+        session,
+        repo_name,
+        url,
+        active,
+        events,
+        description,
+    ):
+        async with self.bitbucket_session(session) as bitbucket:
+            subscription = await bitbucket.webhooks.create_subscription(
+                workspace=self.team,
+                repo_name=repo_name,
+                url=url,
+                active=active,
+                events=events,
+                description=description,
+            )
+
+        return subscription
+
     def __log_session(self, session: Session | None):
         """
         helper function for keeping track of who calls what.

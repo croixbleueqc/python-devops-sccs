@@ -279,3 +279,6 @@ class Context(object):
         return await self.plugin.compliance_report_repository(
             self.session, repository, args
         )
+
+    async def create_webhook_subscription(self, **kwargs):
+        return await self.plugin.create_webhook_subscription(self.session, **kwargs)
