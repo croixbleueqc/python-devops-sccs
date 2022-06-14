@@ -640,17 +640,23 @@ class BitbucketCloud(Sccs):
             # Return the new configuration (new version or PR in progress)
             return continuous_deployment
 
-    async def get_hooks_repository(self, session: Session, repository, args):
-        """see plugin.py"""
-        async with self.bitbucket_session(session) as bitbucket:
-            permission = await bitbucket.webhooks.get_by_repository_name(
-                self.team + "/" + repository
-            )
-            repo = typing_repo.Repository(hash(permission.repository.name))
-            repo.name = permission.repository.name
-            repo.permission = permission.permission
+    # async def get_hooks_repository(self, session: Session, repository, args):
+    #     """see plugin.py"""
+    #     async with self.bitbucket_session(session) as bitbucket:
+    #         permission = await bitbucket.webhooks.get_by_repository_name(
+    #             self.team + "/" + repository
+    #         )
+    #         repo = typing_repo.Repository(hash(permission.repository.name))
+    #         repo.name = permission.repository.name
+    #         repo.permission = permission.permission
 
-            return repo
+    #         return repo
+
+    async def get_webhook_subscriptions(self, session, repo_name):
+        async with self.bitbucket_session(session) as bitbucket:
+            return await bitbucket.webhooks.get_by_repository_name(
+                workspace=self.team, repo_name=repo_name
+            )
 
     async def create_webhook_subscription(
         self,

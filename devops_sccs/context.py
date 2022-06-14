@@ -280,5 +280,8 @@ class Context(object):
             self.session, repository, args
         )
 
+    async def get_webhook_subscriptions(self, **kwargs):
+        return await self.plugin.get_webhook_subscriptions(self.session, **kwargs)
+
     async def create_webhook_subscription(self, **kwargs):
         return await self.plugin.create_webhook_subscription(self.session, **kwargs)
