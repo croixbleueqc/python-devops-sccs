@@ -240,7 +240,7 @@ class BitbucketCloud(Sccs):
         if repo.permission not in self.accesscontrol_rules.get(action, []):
             raise AccessForbidden(repository, action)
 
-    async def get_repositories(self, session: Dict[str, Any], args) -> list:
+    async def get_repositories(self, session: Dict[str, Any], args, **kwargs) -> list:
         """see plugin.py"""
         logging.debug(f"get user permission repositories")
         result = []

@@ -62,7 +62,7 @@ class Context(object):
         """
         return await self.plugin.get_repositories(self.session, args)
 
-    async def watch_repositories(self, args=None, poll_interval=3600):
+    async def watch_repositories(self, poll_interval=3600, *args, **kwargs):
         """Watch for get_repositories"""
 
         return self._core.scheduler.watch(
@@ -70,7 +70,8 @@ class Context(object):
             poll_interval,
             self.plugin.get_repositories,
             session=self.session,  # NOT shared; we don't need to explicitly call access control.
-            args=args,
+            *args,
+            **kwargs,
         )
 
     async def hook_repositories(self, args=None):

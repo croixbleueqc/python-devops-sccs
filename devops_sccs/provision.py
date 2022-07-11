@@ -115,6 +115,7 @@ class Provision(object):
         if g is None:
             raise AnswerValidatorFailure("repository name", validator)
 
+        # TODO this might be covered by the use of pydantic models... to verify
         self.validate(self.repository_contract, repository)
 
         # Verify template (required or not and valid)

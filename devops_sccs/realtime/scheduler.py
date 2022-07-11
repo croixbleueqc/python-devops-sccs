@@ -38,6 +38,7 @@ class Scheduler(object):
         poll_interval: int,
         func,
         filtering=lambda event: True,
+        *args,
         **kwargs,
     ):
         """
@@ -51,7 +52,7 @@ class Scheduler(object):
             w = self.tasks.get(wid)
             if w is None:
                 logging.debug(f"scheduler: creating a new watcher for {hex(wid)}")
-                w = Watcher(wid, poll_interval, func, **kwargs)
+                w = Watcher(wid, poll_interval, func, *args, **kwargs)
                 self.tasks[wid] = w
 
         try:
