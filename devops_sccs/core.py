@@ -28,8 +28,6 @@ import os
 import sys
 from multiprocessing import Manager
 
-from devops_sccs.realtime.hookserver import HookServer
-
 from .cache import AsyncCache
 from .context import Context
 from .errors import PluginAlreadyRegistered, PluginNotRegistered

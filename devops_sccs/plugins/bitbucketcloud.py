@@ -679,6 +679,14 @@ class BitbucketCloud(Sccs):
 
         return subscription
 
+    async def delete_webhook_subscription(self, session, repo_name, subscription_id):
+        async with self.bitbucket_session(session) as bitbucket:
+            await bitbucket.webhooks.delete_subscription(
+                workspace=self.team,
+                repo_name=repo_name,
+                subscription_id=subscription_id,
+            )
+
     def __log_session(self, session: Session | None):
         """
         helper function for keeping track of who calls what.

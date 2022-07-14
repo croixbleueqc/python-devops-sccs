@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
+from requests import delete
 from .accesscontrol import Action
 
 
@@ -247,6 +248,12 @@ class Context(object):
 
         return result
 
+    async def delete_repository(self, repo_name):
+        """
+        Delete a repository
+        """
+        return await self.plugin.delete_repository(self.session, repo_name)
+
     async def compliance(self, remediation=False, report=False, args=None):
         """Check if all repositories are compliants
 
@@ -286,3 +293,9 @@ class Context(object):
 
     async def create_webhook_subscription(self, **kwargs):
         return await self.plugin.create_webhook_subscription(self.session, **kwargs)
+
+    async def delete_webhook_subscription(self, **kwargs):
+        return await self.plugin.delete_webhook_subscription(self.session, **kwargs)
+
+    async def get_projects(self):
+        return await self.plugin.get_projects(self.session)
