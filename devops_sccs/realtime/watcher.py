@@ -39,7 +39,7 @@ class Watcher(object):
         def get_exception(self):
             return self.exception
 
-    def __init__(self, wid, poll_interval, func, **kwargs):
+    def __init__(self, wid, poll_interval, func, *args, **kwargs):
         # Id
         self.wid = wid
 
@@ -57,6 +57,7 @@ class Watcher(object):
 
         # function
         self.func = func
+        self.func_args = args
         self.func_kwargs = kwargs
 
         # tasks
@@ -119,7 +120,7 @@ class Watcher(object):
             await self.event_poll.wait()
             self.event_poll.clear()
 
-            values = await self.func(**self.func_kwargs)
+            values = await self.func(*self.func_args, **self.func_kwargs)
 
             if not isinstance(values, list):
                 values = [values]

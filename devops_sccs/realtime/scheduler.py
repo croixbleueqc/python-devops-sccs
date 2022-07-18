@@ -23,6 +23,7 @@ Managing Watchers, subscription, unsubscribtion...
 
 import asyncio
 import logging
+from typing import Any, Callable
 from .watcher import Watcher
 from .hookclient import HookClient
 
@@ -37,7 +38,7 @@ class Scheduler(object):
         identity: tuple,
         poll_interval: int,
         func,
-        filtering=lambda event: True,
+        filtering: Callable[[Any], bool] = lambda _: True,
         *args,
         **kwargs,
     ):
@@ -46,19 +47,22 @@ class Scheduler(object):
         """
         wid = hash(identity)
         logging.debug(f"wid: {hex(wid)}")
+        w: Watcher | None = None
 
         # Protect task creation
         async with self.lock_tasks:
             w = self.tasks.get(wid)
-            if w is None:
-                logging.debug(f"scheduler: creating a new watcher for {hex(wid)}")
-                w = Watcher(wid, poll_interval, func, *args, **kwargs)
+
+        if w is None:
+            logging.debug(f"scheduler: creating a new watcher for {hex(wid)}")
+            w = Watcher(wid, poll_interval, func, *args, **kwargs)
+            async with self.lock_tasks:
                 self.tasks[wid] = w
 
         try:
             # Create client, connect to the watcher and read events
 
-            client = asyncio.Queue()
+            client: asyncio.Queue = asyncio.Queue()
 
             await w.subscribe(client)
 
@@ -84,52 +88,6 @@ class Scheduler(object):
             async with self.lock_tasks:
                 if w.is_no_watcher():
                     logging.debug(f"scheduler: remove watcher {hex(wid)}")
-                    self.tasks.pop(wid)
-
-    async def hook(self, identity: tuple, filtering=lambda event: True, **kwargs):
-        """
-        Run a new task or connect to an existing task
-        """
-        wid = hash(identity)
-        logging.debug(f"wid: {hex(wid)}")
-
-        # Protect task creation
-        async with self.lock_tasks:
-            w = self.tasks.get(wid)
-            if w is None:
-                logging.debug(f"scheduler: creating a new hook for {hex(wid)}")
-                w = HookClient(wid, **kwargs)
-                self.tasks[wid] = w
-
-        try:
-            # Create client, connect to the watcher and read events
-
-            client = asyncio.Queue()
-
-            await w.subscribe(client)
-
-            while True:
-                event = await client.get()
-                client.task_done()
-
-                if isinstance(event, HookClient.CloseClientOnException):
-                    raise event.get_exception()
-
-                if filtering(event):
-                    yield event
-        except asyncio.CancelledError:
-            logging.debug("cancelled")
-        finally:
-            # disconnect from the watcher
-            try:
-                await w.unsubscribe(client)
-            except asyncio.CancelledError:
-                pass
-
-            # Protect task update
-            async with self.lock_tasks:
-                if w.is_no_hooked():
-                    logging.debug(f"scheduler: remove hook {hex(wid)}")
                     self.tasks.pop(wid)
 
     def notify(self, identity: tuple):
