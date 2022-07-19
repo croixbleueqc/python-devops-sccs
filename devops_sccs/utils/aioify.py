@@ -38,7 +38,8 @@ def getCoreAioify(config=None):
 
 def cleanupCoreAiofy(poolName):
     global _coreaioify
-    _coreaioify.cleanup(poolName)
+    if _coreaioify:
+        _coreaioify.cleanup(poolName)
     _coreaioify = None
 
 

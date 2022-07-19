@@ -4,7 +4,7 @@ import time
 from collections import deque, namedtuple
 from functools import wraps
 from threading import Lock, RLock
-from typing import Callable, Deque, Dict
+from typing import Callable
 
 
 class CacheError(Exception):
@@ -64,13 +64,13 @@ def atscached(
     r_lock = RLock()  # lock for cache reads
     w_lock = Lock()  # lock for cache writes
 
-    cache: Dict = {}
+    cache: dict = {}
     cache_len = cache.__len__
 
     hits = misses = 0
 
     # LRU priority queue
-    pq: Deque = deque() if maxsize == math.inf else deque(maxlen=maxsize)
+    pq: deque[str | int] = deque() if maxsize == math.inf else deque(maxlen=maxsize)
 
     def impl(func):
         @wraps(func)

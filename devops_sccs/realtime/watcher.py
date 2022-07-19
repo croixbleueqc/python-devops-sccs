@@ -192,15 +192,18 @@ class Watcher(object):
         logging.info("starting watcher !")
 
         async def async_start():
+            watch_task = None
+            timed_task = None
             try:
                 watch_task = asyncio.create_task(self.watch())
                 timed_task = asyncio.create_task(self.timed_refresh())
                 await asyncio.gather(watch_task, timed_task)
             except Exception as e:
                 logging.error("watcher: an exception occured during the polling")
-
-                watch_task.cancel()
-                timed_task.cancel()
+                if watch_task:
+                    watch_task.cancel()
+                if timed_task:
+                    timed_task.cancel()
 
                 # Notify all clients about the exception
                 async with self.lock_clients:
