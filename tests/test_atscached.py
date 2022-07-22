@@ -1,9 +1,7 @@
-from cmath import log
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import logging
-from threading import Thread
+from concurrent.futures import ThreadPoolExecutor
 from time import sleep, time
-from devops_sccs.atscached import atscached, CacheInfo
+
+from devops_sccs.atscached import CacheInfo, atscached
 
 
 def test_returns_expected_value():
@@ -29,9 +27,11 @@ def test_returns_cached_value():
 
     a = fn(0)
     b = fn(0)
+
     assert a == b
 
     c = fn(1)
+
     assert a != c
 
 
@@ -45,6 +45,7 @@ def test_expired_returns_new_value():
     a = fn()
     sleep(ttl + 0.1)
     b = fn()
+
     assert a != b
 
 
@@ -80,6 +81,7 @@ def test_cache_clear():
     assert a != b
 
     fn.cache_clear()
+
     assert fn.cache_info() == CacheInfo(hits=0, misses=0, maxsize=maxsize, currsize=0)
 
 
@@ -131,35 +133,126 @@ def test_miss_callback():
     assert count == 2
 
 
-def test_concurrency():
-    # test that concurrent access to the cache doesn't cause problems
+def test_concurrent_reads():
+    # test that concurrent reads to the cache don't cause problems
+
     maxsize = 10
     ttl = 0.1
-    count = 0
 
     @atscached(maxsize=maxsize, ttl=ttl)
     def fn(*a):
-        nonlocal count
-        count += 1
+        return time()
+
+    with ThreadPoolExecutor(max_workers=maxsize) as executor:
+
+        # run the function concurrently with the same key
+        # the expectation is that there will be exactly one cache miss
+        # and maxsize - 1 cache hits
+        executor.map(fn, [0 for _ in range(maxsize)])
+
+    info = fn.cache_info()
+
+    assert info.currsize == 1
+    assert info.hits == maxsize - 1
+    assert info.misses == 1
+
+
+def test_concurrent_writes():
+    # test that concurrent writes to the cache don't cause problems
+
+    maxsize = 10
+
+    # no expiry == 100% cache writes (expiries are handled by the cache itself)
+    ttl = 0.0
+
+    @atscached(maxsize=maxsize, ttl=ttl)
+    def fn(*a):
+        return time()
+
+    with ThreadPoolExecutor(max_workers=maxsize) as executor:
+
+        # run the function concurrently with the same key
+        # the expectation is that there will be exactly maxsize cache misses
+        # and zero cache hits
+        executor.map(fn, [0 for _ in range(maxsize)])
+
+    info = fn.cache_info()
+
+    assert info.currsize == 1
+    assert info.hits == 0
+    assert info.misses == maxsize
+
+
+def test_concurrency_global():
+    # test that the cache can handle concurrent reads and writes to a global/nonlocal variable
+
+    maxsize = 10
+    ttl = 0.1
+
+    nonlocalvar = 0
+
+    @atscached(maxsize=maxsize, ttl=ttl)
+    def fn(*a):
+        nonlocal nonlocalvar
+        nonlocalvar += 1
 
     with ThreadPoolExecutor(max_workers=maxsize) as executor:
 
         def run(i):
             a = i % 2  # only two keys
-            if i == 3 or i == 4:  # two of them cause a cache miss (one for each key)
+            if i == 3 or i == 4:  # two inputs cause a cache miss (one for each key)
                 sleep(ttl + 0.1)
             fn(a)
 
         executor.map(run, range(maxsize))
 
-    # expect fn to have been called twice (once for each key) plus twice more for the two cache misses
-    assert count == 4
-    assert fn.cache_info().currsize == 2
-    assert fn.cache_info().hits == maxsize - count
-    assert fn.cache_info().misses == count
+    # expect the nonlocal variable to be incremented exactly four times
+    # (once for each key + once per cache miss)
+    assert nonlocalvar == 4
+
+    info = fn.cache_info()
+
+    assert info.currsize == 2
+    assert info.hits == maxsize - nonlocalvar
+    assert info.misses == nonlocalvar
 
 
-def test_fetch_flag():
+def test_shared_variable():
+    # test that two functions sharing a variable don't cause problems
+
+    maxsize = 10
+    ttl = 0.1
+
+    nonlocalvar = 0
+
+    @atscached(maxsize=maxsize, ttl=ttl)
+    def fn_a(*a):
+        nonlocal nonlocalvar
+        nonlocalvar += 1
+
+    @atscached(maxsize=maxsize, ttl=ttl)
+    def fn_b(*a):
+        nonlocal nonlocalvar
+        nonlocalvar -= 1
+
+    with ThreadPoolExecutor(max_workers=maxsize) as executor:
+        executor.map(fn_a, range(maxsize))
+        executor.map(fn_b, range(maxsize))
+
+    # expect the nonlocal variable to have been incremented and decremented an equal number of times
+    assert nonlocalvar == 0
+
+    info_a = fn_a.cache_info()
+    info_b = fn_b.cache_info()
+
+    assert info_a.currsize == maxsize and info_b.currsize == maxsize
+    assert info_a.hits == 0 and info_b.hits == 0
+    assert info_a.misses == maxsize and info_b.misses == maxsize
+
+
+def test_forced_fetch():
+    # the fetch argument should cause the cache to invalidate the cache entry
+
     @atscached()
     def fn(*a):
         return time()
@@ -168,3 +261,36 @@ def test_fetch_flag():
     b = fn(0, fetch=True)
 
     assert a != b
+
+
+def test_arg_types():
+    # test that the cache can handle different types of arguments, including unhashable types
+
+    @atscached()
+    def fn(*a):
+        return time()
+
+    try:
+        fn(0)  # int
+        fn(0.0)  # float
+        fn(complex(1, 2))  # complex
+        fn([])  # list
+        fn(())  # tuple
+        fn(range(10))  # range
+        fn("")  # str
+        fn(bytes(10))  # bytes
+        fn(bytearray(10))  # bytearray
+        fn(set())  # set
+        fn(frozenset())  # frozenset
+        fn({})  # dict
+        fn(slice(0, 10))  # slice
+        fn(type(0))  # type
+        fn(None)  # NoneType
+        fn(...)  # Ellipsis
+        fn(True)  # bool
+        fn(NotImplemented)  # NotImplementedType
+
+    except Exception:
+        assert False
+
+    assert True

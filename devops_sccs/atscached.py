@@ -1,5 +1,5 @@
 import inspect
-import math
+from math import inf
 import time
 from collections import deque, namedtuple
 from functools import wraps
@@ -54,8 +54,12 @@ def atscached(
 
     Example:
         >>> @atscached()
-        >>> def expensive_function(a, b):
-                return a + b
+        >>> def now(*args):
+                return time.time()
+        >>> a = now(1, 2) # cache miss; function called
+        >>> b = now(1, 2) # cache hit; function not called
+        >>> assert a == b
+
     """
 
     if ttl <= 0.0:
@@ -70,7 +74,7 @@ def atscached(
     hits = misses = 0
 
     # LRU priority queue
-    pq: deque[str | int] = deque() if maxsize == math.inf else deque(maxlen=maxsize)
+    pq: deque[str | int] = deque(maxlen=maxsize)
 
     def impl(func):
         if inspect.iscoroutinefunction(func):
@@ -84,7 +88,7 @@ def atscached(
                 try:
                     if key not in cache:
                         raise CacheMiss
-                    elif ttl != math.inf and cache[key].expiry < now():
+                    elif ttl != inf and cache[key].expiry < now():
                         raise CacheExpired
                     elif fetch:
                         raise CacheExpired
@@ -134,7 +138,7 @@ def atscached(
                 try:
                     if key not in cache:
                         raise CacheMiss
-                    elif ttl != math.inf and cache[key].expiry < now():
+                    elif ttl != inf and cache[key].expiry < now():
                         raise CacheExpired
                     elif fetch:
                         raise CacheExpired
