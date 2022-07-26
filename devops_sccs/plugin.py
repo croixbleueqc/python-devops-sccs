@@ -170,7 +170,7 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
-    async def get_repository(self, session, repository, args):
+    async def get_repository(self, session, repository, *args, **kwargs):
         """Get a specific repository (with permission)
 
         Args:
@@ -228,7 +228,7 @@ class Sccs(object):
         raise NotImplementedError()
 
     async def get_continuous_deployment_versions_available(
-        self, session, repository, args
+        self, session, repository, args=None
     ):
         """Get continuous deployment versions available
 

@@ -28,9 +28,6 @@ import os
 import sys
 from multiprocessing import Manager
 
-from devops_sccs.realtime.hookserver import HookServer
-
-from .cache import AsyncCache
 from .context import Context
 from .errors import PluginAlreadyRegistered, PluginNotRegistered
 
@@ -83,21 +80,10 @@ class Core(object):
                 templates=config["provision"].get("templates", {}),
             )
 
-        # self.enableHook = config.get("hook_server") is not None
-        # if self.enableHook:
-        #     self.hookServer = HookServer(config["hook_server"])
-        #     # we need to lock it up here , otherwise the endpoints won't register.
-        #     await self.hookServer.lock.acquire()
+        await self.load_builtin_plugins(config.get("plugins", {}))
 
-        val = await self.load_builtin_plugins(config.get("plugins", {}))
+        await self.load_external_plugins(config.get("plugins", {}))
 
-        val = await self.load_external_plugins(config.get("plugins", {}))
-
-        # if self.enableHook and val:
-        #
-        #     self.hookServer.lock.release()
-        #     await self.hookServer.start_server()
-        #
         return self
 
     async def cleanup(self):
@@ -123,8 +109,6 @@ class Core(object):
             plugin_id, plugin = plugin_demo.init_plugin()
             await self.register(plugin_id, plugin, config.get("demo"))
 
-        return True
-
     async def load_external_plugins(self, plugins_config):
         """External plugins
 
@@ -142,8 +126,6 @@ class Core(object):
             if os.path.isdir(dev_external_path):
                 sys.path.append(dev_external_path)
                 await self.register_plugins_in_folder(dev_external_path, config)
-
-        return True
 
     async def register_plugins_in_folder(self, folder_path, config):
         for file in glob.glob(os.path.join(folder_path, "*.py")):
@@ -195,12 +177,3 @@ class Core(object):
     def context(self, plugin_id, args):
         """Controlled context to use in a with statement"""
         return Core.ControlledContext(self, plugin_id, args)
-
-    def create_cache(self, lookup_func=None, key_arg=None, **kwargs_func):
-        return AsyncCache(
-            self.manager.dict(),
-            lookup_func,
-            key_arg,
-            self.manager.RLock(),
-            **kwargs_func,
-        )

@@ -33,8 +33,6 @@ class Context(object):
     )
     UUID_WATCH_REPOSITORIES = "865eb6e0-ded6-4cae-834b-603a22293086"
 
-    _core = None
-
     def __init__(self, session_id, session, plugin, core):
         self.session_id = session_id
         self.session = session
@@ -55,14 +53,14 @@ class Context(object):
         """
         return await self.plugin.passthrough(self.session, request, args)
 
-    async def get_repositories(self, args=None):
+    async def get_repositories(self, *args, **kwargs):
         """Get a list of repositories (with permission for each)
 
         see plugin.py for function description
         """
-        return await self.plugin.get_repositories(self.session, args)
+        return await self.plugin.get_repositories(*args, session=self.session, **kwargs)
 
-    async def watch_repositories(self, args=None, poll_interval=3600):
+    async def watch_repositories(self, poll_interval=3600, *args, **kwargs):
         """Watch for get_repositories"""
 
         return self._core.scheduler.watch(
@@ -70,23 +68,16 @@ class Context(object):
             poll_interval,
             self.plugin.get_repositories,
             session=self.session,  # NOT shared; we don't need to explicitly call access control.
-            args=args,
+            *args,
+            **kwargs,
         )
 
-    async def hook_repositories(self, args=None):
-        return self._core.scheduler.hook(
-            (Context.UUID_WATCH_REPOSITORIES, self.session_id),
-            self.plugin.get_repositories,
-            session=self.session,  # NOT shared; we don't need to explicitly call access control.
-            args=args,
-        )
-
-    async def get_repository(self, repository, args=None):
+    async def get_repository(self, repository):
         """Get a specific repository (with permission)
 
         see plugin.py for function description
         """
-        return await self.plugin.get_repository(self.session, repository, args)
+        return await self.plugin.get_repository(self.session, repository)
 
     async def get_continuous_deployment_config(
         self, repository, environments=None, args=None
@@ -115,24 +106,7 @@ class Context(object):
             self.plugin.get_continuous_deployment_config,
             filtering=filtering_by_environment,
             session=None,  # Shared session
-            repository=repository,
-            args=args,
-        )
-
-    async def hook_continuous_deployment_config(
-        self, repository, environments=None, args=None
-    ):
-        """get and update for get_continuous_deployment_config"""
-        await self.accesscontrol(repository, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
-
-        def filtering_by_environment(event):
-            return not environments or event.value.environment in environments
-
-        return self._core.scheduler.hook(
-            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository),
-            self.plugin.get_continuous_deployment_config,
-            filtering=filtering_by_environment,
-            session=None,  # Shared session
+            environments=environments,
             repository=repository,
             args=args,
         )
@@ -246,6 +220,12 @@ class Context(object):
 
         return result
 
+    async def delete_repository(self, repo_name):
+        """
+        Delete a repository
+        """
+        return await self.plugin.delete_repository(self.session, repo_name)
+
     async def compliance(self, remediation=False, report=False, args=None):
         """Check if all repositories are compliants
 
@@ -279,3 +259,15 @@ class Context(object):
         return await self.plugin.compliance_report_repository(
             self.session, repository, args
         )
+
+    async def get_webhook_subscriptions(self, **kwargs):
+        return await self.plugin.get_webhook_subscriptions(self.session, **kwargs)
+
+    async def create_webhook_subscription(self, **kwargs):
+        return await self.plugin.create_webhook_subscription(self.session, **kwargs)
+
+    async def delete_webhook_subscription(self, **kwargs):
+        return await self.plugin.delete_webhook_subscription(self.session, **kwargs)
+
+    async def get_projects(self):
+        return await self.plugin.get_projects(self.session)
