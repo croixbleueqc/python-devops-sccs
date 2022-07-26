@@ -1,10 +1,10 @@
 import inspect
-import math
+from math import inf
 import time
 from collections import deque, namedtuple
 from functools import wraps
 from threading import Lock, RLock
-from typing import Callable, Deque, Dict
+from typing import Callable
 
 
 class CacheError(Exception):
@@ -22,7 +22,7 @@ class CacheExpired(CacheError, ValueError):
 CacheItem = namedtuple("CacheItem", ("expiry", "value"))
 CacheInfo = namedtuple("CacheInfo", ["hits", "misses", "maxsize", "currsize"])
 
-now = lambda: time.time() // 1
+now = lambda: time.time()
 
 
 def makekey(args: tuple, kwargs: dict):
@@ -54,8 +54,12 @@ def atscached(
 
     Example:
         >>> @atscached()
-        >>> def expensive_function(a, b):
-                return a + b
+        >>> def now(*args):
+                return time.time()
+        >>> a = now(1, 2) # cache miss; function called
+        >>> b = now(1, 2) # cache hit; function not called
+        >>> assert a == b
+
     """
 
     if ttl <= 0.0:
@@ -64,69 +68,115 @@ def atscached(
     r_lock = RLock()  # lock for cache reads
     w_lock = Lock()  # lock for cache writes
 
-    cache: Dict = {}
+    cache: dict = {}
     cache_len = cache.__len__
 
     hits = misses = 0
 
     # LRU priority queue
-    pq: Deque = deque() if maxsize == math.inf else deque(maxlen=maxsize)
+    pq: deque[str | int] = deque(maxlen=maxsize)
 
     def impl(func):
-        @wraps(func)
-        async def wrapper(*args, fetch: bool = False, **kwargs):
-            nonlocal cache, hits, misses
+        if inspect.iscoroutinefunction(func):
 
-            key = makekey(args, kwargs)
+            @wraps(func)
+            async def async_wrapper(*args, fetch: bool = False, **kwargs):
+                nonlocal cache, hits, misses
 
-            try:
-                if key not in cache:
-                    raise CacheMiss
-                elif ttl != math.inf and cache[key].expiry < now():
-                    raise CacheExpired
-                elif fetch:
-                    raise CacheExpired
+                key = makekey(args, kwargs)
 
-                with r_lock:
-                    hits += 1
-                    pq.remove(key)
-                    pq.appendleft(key)
+                try:
+                    if key not in cache:
+                        raise CacheMiss
+                    elif ttl != inf and cache[key].expiry < now():
+                        raise CacheExpired
+                    elif fetch:
+                        raise CacheExpired
 
-            except CacheMiss:
-                result = func(*args, **kwargs)
+                    with r_lock:
+                        hits += 1
+                        pq.remove(key)
+                        pq.appendleft(key)
 
-                if inspect.iscoroutine(result):
-                    result = await result
+                except CacheMiss:
+                    result = await func(*args, **kwargs)
 
-                result = cb_result = miss_callback(result)
+                    result = miss_callback(result)
 
-                if inspect.iscoroutine(cb_result):
-                    result = await cb_result
+                    node = CacheItem(expiry=now() + ttl, value=result)
 
-                node = CacheItem(expiry=now() + ttl, value=result)
+                    with w_lock:
+                        # remove oldest cache item if queue is full
+                        if len(pq) == maxsize:
+                            del cache[pq.pop()]
 
-                with w_lock:
-                    # remove oldest cache item if queue is full
-                    if len(pq) == maxsize:
-                        del cache[pq.pop()]
+                        cache[key] = node
+                        pq.appendleft(key)
+                        misses += 1
 
-                    cache[key] = node
-                    pq.appendleft(key)
-                    misses += 1
+                except CacheExpired:
+                    result = await func(*args, **kwargs)
 
-            except CacheExpired:
-                result = func(*args, **kwargs)
-                if inspect.iscoroutine(result):
-                    result = await result
+                    node = CacheItem(expiry=now() + ttl, value=result)
 
-                node = CacheItem(expiry=now() + ttl, value=result)
+                    with w_lock:
+                        cache[key] = node
+                        pq.appendleft(key)
+                        misses += 1
 
-                with w_lock:
-                    cache[key] = node
-                    pq.appendleft(key)
-                    misses += 1
+                return cache[key].value
 
-            return cache[key].value
+            wrapper = async_wrapper
+        else:
+
+            @wraps(func)
+            def sync_wrapper(*args, fetch: bool = False, **kwargs):
+                nonlocal cache, hits, misses
+
+                key = makekey(args, kwargs)
+
+                try:
+                    if key not in cache:
+                        raise CacheMiss
+                    elif ttl != inf and cache[key].expiry < now():
+                        raise CacheExpired
+                    elif fetch:
+                        raise CacheExpired
+
+                    with r_lock:
+                        hits += 1
+                        pq.remove(key)
+                        pq.appendleft(key)
+
+                except CacheMiss:
+                    result = func(*args, **kwargs)
+
+                    result = miss_callback(result)
+
+                    node = CacheItem(expiry=now() + ttl, value=result)
+
+                    with w_lock:
+                        # remove oldest cache item if queue is full
+                        if len(pq) == maxsize:
+                            del cache[pq.pop()]
+
+                        cache[key] = node
+                        pq.appendleft(key)
+                        misses += 1
+
+                except CacheExpired:
+                    result = func(*args, **kwargs)
+
+                    node = CacheItem(expiry=now() + ttl, value=result)
+
+                    with w_lock:
+                        cache[key] = node
+                        pq.appendleft(key)
+                        misses += 1
+
+                return cache[key].value
+
+            wrapper = sync_wrapper
 
         def cache_info():
             """Report cache statistics."""

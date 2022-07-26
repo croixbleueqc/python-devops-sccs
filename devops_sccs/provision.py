@@ -29,19 +29,18 @@ TODO: isolate execution of the init script (unsafe for now)
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 
-import pygit2
-import shutil
+import logging
+import os
+import random
 import re
+import shutil
+import string
 import subprocess
 
-import string
-import random
-import os
-import logging
+import pygit2
 
-from .errors import AnswerRequired, AnswerValidatorFailure, AuthorSyntax
-
-from .utils.aioify import aioify, getCoreAioify, cleanupCoreAiofy
+from .errors import AnswerRequired, AnswerValidatorFailure, AuthorSyntax, SccsException
+from .utils.aioify import aioify, cleanupCoreAiofy, getCoreAioify
 
 
 class Provision(object):
@@ -377,6 +376,8 @@ class Provision(object):
         intermediate = pygit2.clone_repository(
             destination, checkout_path, callbacks=callbacks
         )
+        if intermediate is None:
+            raise SccsException(f"{destination}: clone failed")
 
         # Git add template repo
         logging.debug(f"{destination}: adding template {template_from_url}")
@@ -390,7 +391,10 @@ class Provision(object):
         logging.debug(
             f"{destination}: creating main branch '{destination_main_branch}'"
         )
-        intermediate.create_branch(destination_main_branch, intermediate.get(tpl_oid))
+        commit = intermediate.get(tpl_oid)
+        if not commit:
+            raise SccsException(f"{destination}: commit not found")
+        intermediate.create_branch(destination_main_branch, commit)  # type: ignore
         intermediate.checkout(f"refs/heads/{destination_main_branch}")
 
         # Execute custom script
@@ -446,7 +450,10 @@ class Provision(object):
             tpl_oid = intermediate.lookup_reference(
                 f"refs/remotes/template/{template_branch}"
             ).target
-            intermediate.create_branch(destination_branch, intermediate.get(tpl_oid))
+            commit = intermediate.get(tpl_oid)
+            if not commit:
+                raise SccsException(f"{destination}: commit not found")
+            intermediate.create_branch(destination_branch, commit)  # type: ignore
             additional_branches.append(destination_branch)
 
         # Git push to origin
@@ -457,6 +464,9 @@ class Provision(object):
             if repo.name == "origin":
                 remote_origin = repo
                 break
+
+        if remote_origin is None:
+            raise SccsException(f"{destination}: origin not found")
 
         remote_origin.push([f"refs/heads/{destination_main_branch}"], callbacks)
         for additional_branch in additional_branches:
@@ -504,7 +514,7 @@ class GitCredential(object):
 
         user = user_email[0].strip()
         email = user_email[1].replace(">", "").strip()
-        return pygit2.Signature(user, email)
+        return pygit2.Signature(user, email, 0, 0, "utf-8")
 
     def for_pygit2(self):
         """Use SSH key to connect with git"""

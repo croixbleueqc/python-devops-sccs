@@ -21,7 +21,7 @@ import logging
 import time
 from contextlib import asynccontextmanager
 from tkinter import N
-from typing import Any, Dict, Generator, List, TypeAlias, overload
+from typing import Any, Coroutine, Dict, Generator, List, TypeAlias, overload
 
 from aiobitbucket.apis.repositories.repository import RepoSlug
 from aiobitbucket.bitbucket import Bitbucket
@@ -33,7 +33,6 @@ from ..atscached import atscached
 from ..core import Core
 from ..errors import SccsException
 from ..plugin import Sccs
-from ..realtime.hookserver import app_sccs
 from ..typing import cd as typing_cd
 from ..typing import repositories as typing_repo
 from ..utils import cd as utils_cd
@@ -249,7 +248,7 @@ class BitbucketCloud(Sccs):
         version: str,
         branch: str,
         config: dict,
-        pullrequest: str = None,
+        pullrequest: str | None = None,
         buildStatus: str = "SUCCESSFUL",
     ) -> typing_cd.EnvironmentConfig:
         """
@@ -307,9 +306,9 @@ class BitbucketCloud(Sccs):
                     break
 
         return (
-            branch.name,
+            str(branch.name),
             self._create_continuous_deployment_config_by_branch(
-                repository, version, branch.name, config, pullrequest_link
+                repository, version, str(branch.name), config, pullrequest_link
             ),
         )
 
@@ -364,10 +363,10 @@ class BitbucketCloud(Sccs):
             deploys = sorted(deploys, key=lambda deploy: deploy[1])
 
             # Get continuous deployment config for all environments selected
-            tasks = []
+            tasks: list[Coroutine] = []
             for branch, index in deploys:
                 tasks.append(
-                    self._get_continuous_deployment_config_by_branch(
+                    self.get_continuous_deployment_config_by_branch(
                         repository, repo, branch, self.cd_environments[index]
                     )
                 )
@@ -488,7 +487,7 @@ class BitbucketCloud(Sccs):
         return versions
 
     async def get_continuous_deployment_versions_available(
-        self, session, repository, args
+        self, session, repository, args=None
     ) -> list:
         result = await self.fetch_continuous_deployment_versions_available(
             session=session, repository=repository, args=args
@@ -515,6 +514,7 @@ class BitbucketCloud(Sccs):
         if len(cd_environment_config) == 0:
             utils_cd.trigger_not_supported(repository, environment)
 
+        continuous_deployment = None
         # using user session for repo manipulations
         async with self.bitbucket_session(session) as bitbucket:
             # Check current configuration using the cache. This is ok because the user will see that deployed version anyway
@@ -604,7 +604,12 @@ class BitbucketCloud(Sccs):
             # race condition finish after that statement.
 
             # Return the new configuration (new version or PR in progress)
-            return continuous_deployment
+        if not continuous_deployment:
+            raise SccsException(
+                f"Couldn't find continuous deployment for {environment}"
+            )
+
+        return continuous_deployment
 
     @atscached()
     async def get_webhook_subscriptions(self, session, repo_name):
@@ -662,4 +667,4 @@ class BitbucketCloud(Sccs):
         return super().__new__(cls)
 
     def __del__(self):
-        app_sccs.delete(self.hook_path)
+        pass

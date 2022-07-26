@@ -25,7 +25,6 @@ import asyncio
 import logging
 from typing import Any, Callable
 from .watcher import Watcher
-from .hookclient import HookClient
 
 
 class Scheduler(object):
@@ -59,10 +58,9 @@ class Scheduler(object):
             async with self.lock_tasks:
                 self.tasks[wid] = w
 
+        client: asyncio.Queue = asyncio.Queue()
         try:
             # Create client, connect to the watcher and read events
-
-            client: asyncio.Queue = asyncio.Queue()
 
             await w.subscribe(client)
 
