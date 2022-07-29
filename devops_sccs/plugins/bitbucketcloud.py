@@ -15,15 +15,14 @@
 from __future__ import annotations
 
 import asyncio
-from functools import partial
 import inspect
 import logging
 import time
 from contextlib import asynccontextmanager
-from tkinter import N
-from typing import Any, Coroutine, Dict, Generator, List, TypeAlias, overload
+from typing import Any, Coroutine, Dict, List, TypeAlias
 
 from aiobitbucket.apis.repositories.repository import RepoSlug
+from aiobitbucket.network import NetworkPagination
 from aiobitbucket.bitbucket import Bitbucket
 from aiobitbucket.errors import NetworkNotFound
 from aiobitbucket.typing.refs import Branch
@@ -175,25 +174,13 @@ class BitbucketCloud(Sccs):
         """see plugin.py"""
         logging.debug(f"access control for {repository}")
 
-        using_cache = (
-            time.time() - session["cache"]["repositories"]["last_access"]
-        ) < session["cache"]["repositories"]["ttl"]
-        repo = None
+        repo: NetworkPagination | None
 
-        if using_cache:
-            logging.debug("access control: using cache")
-            # TODO: Optimize
-            for value in session["cache"]["repositories"]["values"]:
-                if value.name == repository:
-                    repo = value
-                    break
-        else:
-            logging.debug("access control: cache is invalid; direct API calls")
-            async with self.bitbucket_session(session) as bitbucket:
-                repo = await bitbucket.user.permissions.repositories.get_by_full_name(
-                    self.team + "/" + repository
-                )
-                # no need to convert to typing_repo.Repository() as both expose permission attributes in the same way
+        async with self.bitbucket_session(session) as bitbucket:
+            repo = await bitbucket.user.permissions.repositories.get_by_full_name(
+                self.team + "/" + repository
+            )
+            # no need to convert to typing_repo.Repository() as both expose permission attributes in the same way
 
         if repo is None:
             # No read/write or admin access on this repository
