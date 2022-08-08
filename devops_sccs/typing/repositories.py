@@ -21,16 +21,9 @@ Define standard typing to manage continuous deployment
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Field
-from . import WatcherTyping2
+from . import WatcherType
 
 
-class Repository(WatcherTyping2):
-    name = Field()
-    permission = Field()
-
-    def __eq__(self, other):
-        if not isinstance(other, Repository):
-            return False
-
-        return self.name == other.name
+class Repository(WatcherType):
+    name: str
+    permission: str

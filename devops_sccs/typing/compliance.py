@@ -21,11 +21,12 @@ Define standard typing to manage report, diverence, etc
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Typing2, Field
 from enum import Enum
 
+from pydantic import BaseModel
 
-class CurrentExpected(Enum):
+
+class CurrentExpected(str, Enum):
     SET = "set"
     UNSET = "unset"
     MATCH = "match"
@@ -34,16 +35,13 @@ class CurrentExpected(Enum):
     AVAILABE = "available"
     UNAVAILABLE = "unavailable"
 
-    def __str__(self):
-        return self.value
 
-
-class Divergence(Typing2):
-    rule = Field()
+class Divergence(BaseModel):
+    rule: str
 
     # current and expected are not limited to CurrentExpected class values
-    current = Field().converter(dumps=str)
-    expected = Field().converter(dumps=str)
+    current: CurrentExpected
+    expected: CurrentExpected
 
     def __eq__(self, other):
         if not isinstance(other, Divergence):
@@ -56,9 +54,9 @@ class Divergence(Typing2):
         )
 
 
-class RepositoryDivergence(Typing2):
-    name = Field()
-    divergences = Field().list_of(inside_instanciator=Divergence)
+class RepositoryDivergence(BaseModel):
+    name: str
+    divergences: list[Divergence] = []
 
     def pre_loads(self, data):
         # Change the structure to move the key as the name field

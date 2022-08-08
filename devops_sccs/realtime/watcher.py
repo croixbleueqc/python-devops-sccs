@@ -24,9 +24,12 @@ Provide a way to poll an API and to stream results as events (ADD, MODIFY, DELET
 import asyncio
 import logging
 from collections import OrderedDict
-from ..typing.event import Event, EventType
-from ..typing import WatcherTyping2
+
+from pydantic import ValidationError
+
 from ..errors import SccsException
+from ..typing import WatcherType
+from ..typing.event import Event, EventType
 
 
 class Watcher(object):
@@ -86,10 +89,7 @@ class Watcher(object):
             elif len(self.cache) > 0:
                 # Propagate previous events to the new client (all clients will be in sync after)
                 for value in self.cache.values():
-                    event = Event()
-                    event.type_ = EventType.ADDED
-                    event.value = value
-                    event.key = value.key
+                    event = Event(type_=EventType.ADDED, value=value, key=value.key)
                     client.put_nowait(event)
 
     async def unsubscribe(self, client: asyncio.Queue):
@@ -129,39 +129,39 @@ class Watcher(object):
             async with self.lock_clients:
 
                 # DELETED before
-                values_keys = set((i.key for i in values))
+                values_keys = set((hash(repr(i)) for i in values))
                 cache_keys = self.cache.keys()
                 delete_keys = cache_keys - values_keys
 
                 for key in delete_keys:
-                    event = Event()
-                    event.type_ = EventType.DELETED
-                    event.value = self.cache.pop(key)
-                    event.key = key
+                    event = Event(
+                        type_=EventType.DELETED,
+                        value=self.cache.pop(key),
+                        key=key,
+                    )
 
                     # Dispatch event
                     self._dispatch(event)
 
                 # ADDED / MODIFIED
                 for value in values:
-                    if not isinstance(value, WatcherTyping2):
+                    if not isinstance(value, WatcherType):
                         logging.error("watcher: value is invalid")
                         raise ValueError()
 
                     cache_value = self.cache.get(value.key, Watcher._undef)
 
+                    type_: EventType
+
                     if cache_value is Watcher._undef:
-                        event = Event()
-                        event.type_ = EventType.ADDED
+                        type_ = EventType.ADDED
                     elif cache_value != value:
-                        event = Event()
-                        event.type_ = EventType.MODIFIED
+                        type_ = EventType.MODIFIED
                     else:
                         # logging.info("identical !")
                         continue
 
-                    event.value = value
-                    event.key = value.key
+                    event = Event(key=value.key, type_=type_, value=value)
 
                     # Update the cache
                     self.cache[event.key] = event.value

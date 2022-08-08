@@ -21,12 +21,10 @@ Define standard typing to manage continuous deployment
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Field
-from enum import Enum
-from . import WatcherTyping2
+from . import WatcherType
 
 
-class EnvironmentConfig(WatcherTyping2):
+class EnvironmentConfig(WatcherType):
     """
     Defines which version is deployed on a specific environment.
 
@@ -34,10 +32,10 @@ class EnvironmentConfig(WatcherTyping2):
 
     """
 
-    environment = Field()
-    version = Field()
-    readonly = Field(instanciator=bool, default=False)
-    pullrequest = Field()
+    environment: str
+    version: str
+    readonly: bool = False
+    pullrequest: str | None = None
 
     def __eq__(self, other):
         if not isinstance(other, EnvironmentConfig):
@@ -54,13 +52,13 @@ class EnvironmentConfig(WatcherTyping2):
         return hash((self.environment, self.version, self.readonly, self.pullrequest))
 
 
-class Available(WatcherTyping2):
+class Available(WatcherType):
     """
     Defines an available deployment (typically generated from a pipeline) with a build number and an associated version.
     """
 
-    build = Field()
-    version = Field()
+    build: str
+    version: str
 
     def __eq__(self, other):
         if not isinstance(other, Available):

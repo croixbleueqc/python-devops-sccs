@@ -8,10 +8,9 @@ setup(
     packages=find_packages(exclude=["tests"]),
     install_requires=[
         "pygit2",
-        "typing-engine>=2.0.0",
         "fastapi-utils",
         "fastapi",
-        "uvicorn",
+        "atlassian-python-api",
     ],
     # Metadata
     author="Croix Bleue du Quebec",
