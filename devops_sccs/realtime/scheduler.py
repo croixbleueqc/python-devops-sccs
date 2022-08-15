@@ -1,9 +1,3 @@
-"""
-Scheduler module
-
-Managing Watchers, subscription, unsubscribtion...
-"""
-
 # Copyright 2021 Croix Bleue du Québec
 
 # This file is part of python-devops-sccs.
@@ -28,9 +22,15 @@ from .watcher import Watcher
 
 
 class Scheduler(object):
+    """
+    Scheduler module
+
+    Managing Watchers, subscription, unsubscribtion...
+    """
+
     def __init__(self):
         self.tasks = {}
-        self.lock_tasks = asyncio.Lock()
+        self._lock = asyncio.Lock()
 
     async def watch(
         self,
@@ -49,26 +49,26 @@ class Scheduler(object):
         w: Watcher | None = None
 
         # Protect task creation
-        async with self.lock_tasks:
+        async with self._lock:
             w = self.tasks.get(wid)
 
         if w is None:
             logging.debug(f"scheduler: creating a new watcher for {hex(wid)}")
             w = Watcher(wid, poll_interval, func, *args, **kwargs)
-            async with self.lock_tasks:
+            async with self._lock:
                 self.tasks[wid] = w
 
-        client: asyncio.Queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue()
         try:
             # Create client, connect to the watcher and read events
 
-            await w.subscribe(client)
+            await w.subscribe(queue)
 
             while True:
-                event = await client.get()
-                client.task_done()
+                event = await queue.get()
+                queue.task_done()
 
-                if isinstance(event, Watcher.CloseClientOnException):
+                if isinstance(event, Watcher.CloseSessionOnException):
                     raise event.get_exception()
 
                 if filtering(event):
@@ -78,13 +78,13 @@ class Scheduler(object):
         finally:
             # disconnect from the watcher
             try:
-                await w.unsubscribe(client)
+                await w.unsubscribe(queue)
             except asyncio.CancelledError:
                 pass
 
             # Protect task update
-            async with self.lock_tasks:
-                if w.is_no_watcher():
+            async with self._lock:
+                if w.is_empty():
                     logging.debug(f"scheduler: remove watcher {hex(wid)}")
                     self.tasks.pop(wid)
 

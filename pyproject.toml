@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "devops_sccs"
+version = "0.2.0"
+description = "Source code control systems abstraction for DevOps"
+authors = ["Croix Bleue <devops@qc.croixbleue.ca>"]
+license = "LGPL-3.0-or-later"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pygit2 = "^1.10.0"
+fastapi = "^0.79.0"
+fastapi-utils = "^0.2.1"
+atlassian-python-api = "^3.26.0"
+
+[tool.poetry.dev-dependencies]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

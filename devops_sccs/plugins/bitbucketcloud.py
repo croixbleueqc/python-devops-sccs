@@ -18,7 +18,6 @@ import inspect
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, TypeAlias
-from requests.exceptions import HTTPError
 
 from atlassian.bitbucket import Cloud
 from atlassian.bitbucket.cloud.repositories import Repository
@@ -27,10 +26,10 @@ from requests import Response
 
 
 from ..accesscontrol import Action, Permission
-from ..atscached import atscached
-from ..core import Core
+from ..ats_cache import ats_cache
+from ..client import SccsClient
 from ..errors import SccsException
-from ..plugin import Sccs
+from ..plugin import SccsPlugin
 from ..typing import cd as typing_cd
 from ..typing import repositories as typing_repo
 from ..utils import cd as utils_cd
@@ -47,11 +46,11 @@ def init_plugin():
 Session: TypeAlias = Cloud | dict[str, Any]
 
 
-class BitbucketCloud(Sccs):
+class BitbucketCloud(SccsPlugin):
     hook_path = f"/{PLUGIN_NAME}/hooks/repo"
     _instance: BitbucketCloud | None = None
 
-    async def init(self, core: Core, args):
+    async def init(self, core: SccsClient, args):
         """
         Initialize the plugin
         """
@@ -180,7 +179,7 @@ class BitbucketCloud(Sccs):
             # will raise ApiPermissionError if access is forbidden
             bitbucket.workspaces.get(self.team).repositories.get(repository)
 
-    @atscached()
+    @ats_cache()
     async def get_repositories(self, session: dict[str, Any], args: Any = None) -> list:
         return await self._get_repositories(session, args)
 
@@ -204,7 +203,7 @@ class BitbucketCloud(Sccs):
 
         return result
 
-    @atscached()
+    @ats_cache()
     async def get_repository(self, session, repository):
         return await super().get_repository(session, repository)
 
@@ -244,7 +243,7 @@ class BitbucketCloud(Sccs):
         )
         return env
 
-    @atscached()
+    @ats_cache()
     def get_continuous_deployment_config_by_branch(
         self, repository: str, repo: Repository, branch_name: str, config: dict
     ) -> tuple[str, typing_cd.EnvironmentConfig]:
@@ -309,7 +308,7 @@ class BitbucketCloud(Sccs):
             session=session, repository=repository
         )
 
-    @atscached()
+    @ats_cache()
     async def fetch_continuous_deployment_config(
         self, repository, session=None, environment=None
     ):
@@ -370,7 +369,7 @@ class BitbucketCloud(Sccs):
             )
         return results
 
-    @atscached()
+    @ats_cache()
     async def fetch_continuous_deployment_environments_available(
         self, repository, session=None
     ):
@@ -429,7 +428,7 @@ class BitbucketCloud(Sccs):
         )
         return result
 
-    @atscached()
+    @ats_cache()
     async def fetch_continuous_deployment_versions_available(
         self, repository, session=None, args=None
     ) -> list:
@@ -613,7 +612,7 @@ class BitbucketCloud(Sccs):
 
         return continuous_deployment
 
-    @atscached()
+    @ats_cache()
     async def get_webhook_subscriptions(self, session, repo_name):
         async with self.bitbucket_session(session) as bitbucket:
             repo = bitbucket.workspaces.get(self.team).repositories.get(

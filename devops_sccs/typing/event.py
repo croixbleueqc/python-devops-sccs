@@ -35,7 +35,7 @@ class EventType(str, Enum):
 
 class Event(BaseModel):
     key: int
-    type: EventType = Field(alias="type_")
+    type: EventType = Field(alias="_type")
     value: Any
 
     class Config:

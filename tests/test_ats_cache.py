@@ -1,11 +1,11 @@
 from concurrent.futures import ThreadPoolExecutor
 from time import sleep, time
 
-from devops_sccs.atscached import CacheInfo, atscached
+from devops_sccs.ats_cache import CacheInfo, ats_cache
 
 
 def test_returns_expected_value():
-    @atscached()
+    @ats_cache()
     def fn():
         return "test"
 
@@ -13,7 +13,7 @@ def test_returns_expected_value():
 
 
 async def test_returns_expected_value_async():
-    @atscached()
+    @ats_cache()
     async def fn():
         return "test"
 
@@ -21,7 +21,7 @@ async def test_returns_expected_value_async():
 
 
 def test_returns_cached_value():
-    @atscached()
+    @ats_cache()
     def fn(*a):
         return time()
 
@@ -38,7 +38,7 @@ def test_returns_cached_value():
 def test_expired_returns_new_value():
     ttl = 0.1
 
-    @atscached(ttl=ttl)
+    @ats_cache(ttl=ttl)
     def fn():
         return time()
 
@@ -53,7 +53,7 @@ def test_cache_info():
     maxsize = 10
     ttl = 0.1
 
-    @atscached(ttl=ttl, maxsize=maxsize)
+    @ats_cache(ttl=ttl, maxsize=maxsize)
     def fn(*a):
         return "test"
 
@@ -70,7 +70,7 @@ def test_cache_info():
 def test_cache_clear():
     maxsize = 10
 
-    @atscached(maxsize=maxsize)
+    @ats_cache(maxsize=maxsize)
     def fn(*a):
         return time()
 
@@ -88,7 +88,7 @@ def test_cache_clear():
 def test_cache_overflow():
     maxsize = 10
 
-    @atscached(maxsize=maxsize)
+    @ats_cache(maxsize=maxsize)
     def fn(*a):
         return time()
 
@@ -117,7 +117,7 @@ def test_miss_callback():
         count += 1
         return result
 
-    @atscached(miss_callback=miss_callback)
+    @ats_cache(miss_callback=miss_callback)
     def fn(*a):
         return time()
 
@@ -139,7 +139,7 @@ def test_concurrent_reads():
     maxsize = 10
     ttl = 0.1
 
-    @atscached(maxsize=maxsize, ttl=ttl)
+    @ats_cache(maxsize=maxsize, ttl=ttl)
     def fn(*a):
         return time()
 
@@ -165,7 +165,7 @@ def test_concurrent_writes():
     # no expiry == 100% cache writes (expiries are handled by the cache itself)
     ttl = 0.0
 
-    @atscached(maxsize=maxsize, ttl=ttl)
+    @ats_cache(maxsize=maxsize, ttl=ttl)
     def fn(*a):
         return time()
 
@@ -191,7 +191,7 @@ def test_concurrency_global():
 
     nonlocalvar = 0
 
-    @atscached(maxsize=maxsize, ttl=ttl)
+    @ats_cache(maxsize=maxsize, ttl=ttl)
     def fn(*a):
         nonlocal nonlocalvar
         nonlocalvar += 1
@@ -225,12 +225,12 @@ def test_shared_variable():
 
     nonlocalvar = 0
 
-    @atscached(maxsize=maxsize, ttl=ttl)
+    @ats_cache(maxsize=maxsize, ttl=ttl)
     def fn_a(*a):
         nonlocal nonlocalvar
         nonlocalvar += 1
 
-    @atscached(maxsize=maxsize, ttl=ttl)
+    @ats_cache(maxsize=maxsize, ttl=ttl)
     def fn_b(*a):
         nonlocal nonlocalvar
         nonlocalvar -= 1
@@ -253,7 +253,7 @@ def test_shared_variable():
 def test_forced_fetch():
     # the fetch argument should cause the cache to invalidate the cache entry
 
-    @atscached()
+    @ats_cache()
     def fn(*a):
         return time()
 
@@ -266,7 +266,7 @@ def test_forced_fetch():
 def test_arg_types():
     # test that the cache can handle different types of arguments, including unhashable types
 
-    @atscached()
+    @ats_cache()
     def fn(*a):
         return time()
 

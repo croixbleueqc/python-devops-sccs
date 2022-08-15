@@ -22,14 +22,14 @@ will fake operations to demonstrate what a plugin should do.
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from ..plugin import Sccs
+from ..plugin import SccsPlugin
 from ..typing import cd as typing_cd
 from ..utils import cd as utils_cd
 
 import hashlib
 
 
-class Demo(Sccs):
+class Demo(SccsPlugin):
     async def init(self, core, args):
         # Mock few repositories with permissions
         self.FAKE_DATA = {

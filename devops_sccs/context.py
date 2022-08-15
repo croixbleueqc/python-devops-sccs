@@ -18,7 +18,7 @@
 from .accesscontrol import Action
 
 
-class Context(object):
+class Context:
     """
     Context permits to communicate with a source code control system for a specific session.
     A session is an abstract concept that can hold nothing or any object type understandable by the plugin which issued it.
@@ -33,11 +33,11 @@ class Context(object):
     )
     UUID_WATCH_REPOSITORIES = "865eb6e0-ded6-4cae-834b-603a22293086"
 
-    def __init__(self, session_id, session, plugin, core):
+    def __init__(self, session_id, session, plugin, client):
         self.session_id = session_id
         self.session = session
         self.plugin = plugin
-        self._core = core
+        self._client = client
 
     async def accesscontrol(self, repository, action, args=None):
         """Access Control
@@ -63,7 +63,7 @@ class Context(object):
     async def watch_repositories(self, poll_interval=3600, *args, **kwargs):
         """Watch for get_repositories"""
 
-        return self._core.scheduler.watch(
+        return self._client.scheduler.watch(
             (Context.UUID_WATCH_REPOSITORIES, self.session_id),
             poll_interval,
             self.plugin.get_repositories,
@@ -100,7 +100,7 @@ class Context(object):
         def filtering_by_environment(event):
             return not environments or event.value.environment in environments
 
-        return self._core.scheduler.watch(
+        return self._client.scheduler.watch(
             (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository),
             poll_interval,
             self.plugin.get_continuous_deployment_config,
@@ -129,7 +129,7 @@ class Context(object):
             repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE
         )
 
-        return self._core.scheduler.watch(
+        return self._client.scheduler.watch(
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repository),
             poll_interval,
             self.plugin.get_continuous_deployment_versions_available,
@@ -149,7 +149,7 @@ class Context(object):
             self.session, repository, environment, version, args
         )
 
-        self._core.scheduler.notify(
+        self._client.scheduler.notify(
             (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository)
         )
 
@@ -175,7 +175,7 @@ class Context(object):
             repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
         )
 
-        return self._core.scheduler.watch(
+        return self._client.scheduler.watch(
             (
                 Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE,
                 repository,
@@ -200,7 +200,7 @@ class Context(object):
 
     def get_add_repository_contract(self):
         """Get the contract to add a new repository."""
-        return self._core.provision.get_add_repository_contract()
+        return self._client.provision.get_add_repository_contract()
 
     async def add_repository(self, repository, template, template_params, args=None):
         """Add a new repository
@@ -209,14 +209,16 @@ class Context(object):
         """
         result = await self.plugin.add_repository(
             self.session,
-            self._core.provision,
+            self._client.provision,
             repository,
             template,
             template_params,
             args,
         )
 
-        self._core.scheduler.notify((Context.UUID_WATCH_REPOSITORIES, self.session_id))
+        self._client.scheduler.notify(
+            (Context.UUID_WATCH_REPOSITORIES, self.session_id)
+        )
 
         return result
 
