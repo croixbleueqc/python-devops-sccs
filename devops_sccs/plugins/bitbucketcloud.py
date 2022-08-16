@@ -88,38 +88,48 @@ class BitbucketCloud(SccsPlugin):
 
         BitbucketCloud._instance = self
 
-    def get_session_id(self, args):
+    def get_session_id(self, session: dict[str, Any] | Cloud):
         """see plugin.py"""
 
-        session_id = hash((args["user"], args["apikey"]))
+        if isinstance(session, dict):
+            session_id = hash((session["user"], session["apikey"]))
+        elif isinstance(session, Cloud):
+            session_id = hash((session.username, session.password))
+        else:
+            raise SccsException("Invalid session")
 
         logging.debug(f"get session id: {session_id}")
         return session_id
 
-    async def open_session(self, session_id, args):
+    async def open_session(self, session_id, session: dict[str, Any] | Cloud):
         """see plugin.py"""
 
         existing_session = self.local_sessions.get(session_id)
 
-        if existing_session is not None:
-            existing_session["shared-session"] += 1
-            logging.debug(
-                f'reuse session {session_id} (shared: {existing_session["shared-session"]})'
-            )
-            return existing_session
+        if isinstance(session, dict):
+            if existing_session is not None:
+                existing_session["shared-session"] += 1
+                logging.debug(
+                    f'reuse session {session_id} (shared: {existing_session["shared-session"]})'
+                )
+                return existing_session
 
-        logging.debug(f"create a new session {session_id}")
-        new_session = {
-            "session_id": session_id,
-            "shared-session": 1,
-            "user": {
-                "user": args["user"],
-                "apikey": args["apikey"],
-                "team": self.team,
-                "author": args["author"],
-            },
-            "cache": {"repositories": {"values": [], "last_access": 0, "ttl": 7200}},
-        }
+            logging.debug(f"create a new session {session_id}")
+            new_session = {
+                "session_id": session_id,
+                "shared-session": 1,
+                "user": {
+                    "user": session["user"],
+                    "apikey": session["apikey"],
+                    "team": self.team,
+                    "author": session["author"],
+                },
+                "cache": {
+                    "repositories": {"values": [], "last_access": 0, "ttl": 7200}
+                },
+            }
+        elif isinstance(session, Cloud):
+            new_session = session
 
         self.local_sessions[session_id] = new_session
 
@@ -128,19 +138,19 @@ class BitbucketCloud(SccsPlugin):
     def get_session(self, session_id) -> dict[str, Any] | None:
         return self.local_sessions.get(session_id)
 
-    async def close_session(self, session_id, session, args):
+    async def close_session(self, session_id, session: dict[str, Any] | Cloud, args):
         """see plugin.py"""
+        if isinstance(session, dict):
+            session["shared-session"] -= 1
 
-        session["shared-session"] -= 1
+            logging.debug(
+                f'close session {session_id} (shared: {session["shared-session"]})'
+            )
 
-        logging.debug(
-            f'close session {session_id} (shared: {session["shared-session"]})'
-        )
-
-        if session["shared-session"] <= 0:
-            # not used anymore
-            logging.debug(f"remove session {session_id} from cache")
-            self.local_sessions.pop(session_id)
+            if session["shared-session"] <= 0:
+                # not used anymore
+                logging.debug(f"remove session {session_id} from cache")
+                self.local_sessions.pop(session_id)
 
     @asynccontextmanager
     async def bitbucket_session(
@@ -189,17 +199,28 @@ class BitbucketCloud(SccsPlugin):
         result: list[typing_repo.Repository] = []
 
         async with self.bitbucket_session(session) as bitbucket:
-            permission_repos = bitbucket.get("user/permissions/repositories")
-            if permission_repos is None:
-                return result
-            for repo in permission_repos["values"]:
-                result.append(
-                    typing_repo.Repository(
-                        key=hash(repo["repository"]["name"]),
-                        name=repo["repository"]["name"],
-                        permission=repo["permission"],
+            permission_repos = bitbucket.get(
+                "user/permissions/repositories", params={"pagelen": 100}
+            )
+            while (
+                permission_repos is not None
+                and permission_repos.get("next") is not None
+            ):
+                for repo in permission_repos["values"]:
+                    result.append(
+                        typing_repo.Repository(
+                            key=hash(repo["repository"]["name"]),
+                            name=repo["repository"]["name"],
+                            permission=repo["permission"],
+                        )
                     )
-                )
+                try:
+                    permission_repos = bitbucket.get(
+                        permission_repos["next"], absolute=True
+                    )
+                except Exception as e:
+                    logging.error(f"error getting next page: {e}")
+                    permission_repos = None
 
         return result
 
@@ -265,12 +286,12 @@ class BitbucketCloud(SccsPlugin):
         commit_hash = repo.branches.get(branch_name).hash
         version: str
         if file_version is not None:
-            res: Response | None = repo.get(
+            res: bytes | None = repo.get(
                 path=f"src/{commit_hash}/{file_version}",
                 not_json_response=True,
             )
             if res is not None:
-                version = res.text
+                version = res.decode("utf-8")
             else:
                 raise SccsException(
                     f"failed to get version from {file_version} for {repository} on {branch_name}"
@@ -291,7 +312,7 @@ class BitbucketCloud(SccsPlugin):
                     and self.cd_pullrequest_tag in pullrequest.title
                 ):
                     link = pullrequest.get_link("html")
-                    pullrequest_link = link["href"] if link else None
+                    pullrequest_link = link["href"] if type(link) is dict else link
                     break
 
         return (
@@ -318,11 +339,11 @@ class BitbucketCloud(SccsPlugin):
 
     async def _fetch_continuous_deployment_config(
         self, repository, session=None, environments=None
-    ) -> list[tuple[str, typing_cd.EnvironmentConfig]]:
+    ) -> list[typing_cd.EnvironmentConfig]:
         """
         fetch the version deployed in each environment
         """
-        results: list[tuple[str, typing_cd.EnvironmentConfig]] = []
+        results: list[typing_cd.EnvironmentConfig] = []
 
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             deploys = []
@@ -357,13 +378,11 @@ class BitbucketCloud(SccsPlugin):
             # Get continuous deployment config for all environments selected
             env_configs: list[tuple[str, typing_cd.EnvironmentConfig]] = []
             for branch_name, index in deploys:
-                env_configs.append(
-                    self.get_continuous_deployment_config_by_branch(
-                        repository, repo, branch_name, self.cd_environments[index]
-                    )
+                env_config = self.get_continuous_deployment_config_by_branch(
+                    repository, repo, branch_name, self.cd_environments[index]
                 )
+                results.append(env_config[1])
 
-            results = env_configs
             logging.debug(
                 f"_fetch_continuous_deployment_config for {repository} result is : {results}"
             )
@@ -472,7 +491,7 @@ class BitbucketCloud(SccsPlugin):
                     available = typing_cd.Available(
                         key=hash((repository, pipeline.build_number)),
                         build=str(pipeline.build_number),
-                        version=target.commit.hash,
+                        version=target["commit"]["hash"],
                     )
                     logging.debug(
                         f"adding version available for build nb : {pipeline.build_number}"
@@ -519,9 +538,9 @@ class BitbucketCloud(SccsPlugin):
                 environments=[environment],
                 args=args,
             )
-            continuous_deployment = list_continuous_deployment[0][1]
+            continuous_deployment = list_continuous_deployment[0]
 
-            for _, config in list_continuous_deployment:
+            for config in list_continuous_deployment:
                 if config.environment == environment:
                     continuous_deployment = config
 
@@ -584,6 +603,7 @@ class BitbucketCloud(SccsPlugin):
                     "author": session["user"]["author"],
                     "branch": branch if deploy_branch is None else deploy_branch.name,
                 },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
 
             if deploy_branch is not None:

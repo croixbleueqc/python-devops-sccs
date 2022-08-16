@@ -18,10 +18,10 @@
 from __future__ import annotations
 
 from pydantic import BaseModel
-from typing import Optional
+from typing import Any, Optional
 
 
 class WatcherType(BaseModel):
     key: int
-    data: dict | None = None
+    data: Any | None = None
     parent: "Optional[WatcherType]" = None

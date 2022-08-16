@@ -127,9 +127,16 @@ class Watcher(object):
 
             # Protect the cache and list of clients
             async with self._lock:
+                for value in values:
+                    if not isinstance(value, WatcherType):
+                        logging.error("watcher: value is invalid")
+                        value = WatcherType(
+                            key=hash(repr(value)),
+                            data=value.dict() if hasattr(value, "dict") else value,
+                        )
 
                 # DELETED before
-                values_keys = set(hash(repr(i)) for i in values)
+                values_keys = set(v.key for v in values)
                 cache_keys = self.cache.keys()
                 delete_keys = cache_keys - values_keys
 
@@ -145,10 +152,6 @@ class Watcher(object):
 
                 # ADDED / MODIFIED
                 for value in values:
-                    if not isinstance(value, WatcherType):
-                        logging.error("watcher: value is invalid")
-                        raise ValueError()
-
                     cache_value = self.cache.get(value.key, _sentinel)
 
                     _type: EventType

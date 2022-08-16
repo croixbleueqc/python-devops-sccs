@@ -33,7 +33,7 @@ class EventType(str, Enum):
     INFO = "INFO"
 
 
-class Event(BaseModel):
+class Event(BaseModel):  # AKA dataResponse
     key: int
     type: EventType = Field(alias="_type")
     value: Any
