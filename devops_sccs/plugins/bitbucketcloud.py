@@ -22,8 +22,6 @@ from typing import Any, TypeAlias
 from atlassian.bitbucket import Cloud
 from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.errors import ApiNotFoundError, ApiPermissionError
-from requests import Response
-
 
 from ..accesscontrol import Action, Permission
 from ..ats_cache import ats_cache
@@ -202,10 +200,7 @@ class BitbucketCloud(SccsPlugin):
             permission_repos = bitbucket.get(
                 "user/permissions/repositories", params={"pagelen": 100}
             )
-            while (
-                permission_repos is not None
-                and permission_repos.get("next") is not None
-            ):
+            while permission_repos is not None:
                 for repo in permission_repos["values"]:
                     result.append(
                         typing_repo.Repository(
@@ -221,6 +216,7 @@ class BitbucketCloud(SccsPlugin):
                 except Exception as e:
                     logging.error(f"error getting next page: {e}")
                     permission_repos = None
+                    break
 
         return result
 
