@@ -104,15 +104,18 @@ class BitbucketCloud(SccsPlugin):
 
         existing_session = self.local_sessions.get(session_id)
 
-        if isinstance(session, dict):
-            if existing_session is not None:
+        if existing_session is not None:
+            if isinstance(existing_session, dict):
                 existing_session["shared-session"] += 1
                 logging.debug(
                     f'reuse session {session_id} (shared: {existing_session["shared-session"]})'
                 )
-                return existing_session
+            return existing_session
 
-            logging.debug(f"create a new session {session_id}")
+        logging.debug(f"create a new session {session_id}")
+
+        new_session: dict[str, Any] | Cloud
+        if isinstance(session, dict):
             new_session = {
                 "session_id": session_id,
                 "shared-session": 1,
@@ -127,7 +130,11 @@ class BitbucketCloud(SccsPlugin):
                 },
             }
         elif isinstance(session, Cloud):
-            new_session = session
+            new_session = Cloud(
+                username=session.username, password=session.password, cloud=True
+            )
+
+        new_session = session
 
         self.local_sessions[session_id] = new_session
 
@@ -323,15 +330,15 @@ class BitbucketCloud(SccsPlugin):
         self, session, repository, environments, args
     ):
         return await self.fetch_continuous_deployment_config(
-            session=session, repository=repository
+            session=session, repository=repository, environments=environments
         )
 
     @ats_cache()
     async def fetch_continuous_deployment_config(
-        self, repository, session=None, environment=None
+        self, repository, session=None, environments=None
     ):
         return await self._fetch_continuous_deployment_config(
-            repository, session, environment
+            repository, session, environments
         )
 
     async def _fetch_continuous_deployment_config(
@@ -477,7 +484,11 @@ class BitbucketCloud(SccsPlugin):
             ):
                 target = pipeline.get_data("target")
                 state = pipeline.get_data("state")
-                if target is None or state is None:
+                if (
+                    target is None
+                    or state is None
+                    or target["type"] != "pipeline_ref_target"
+                ):
                     continue
                 ref_name = target["ref_name"]
                 result_name = state["result"]["name"]
