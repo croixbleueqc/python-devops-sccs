@@ -222,14 +222,15 @@ class BitbucketCloud(SccsPlugin):
 
     @ats_cache()
     async def get_repository(self, session, repository):
-        return await super().get_repository(session, repository)
+        return await self._get_repository(session, repository)
 
     async def _get_repository(self, session: dict[str, Any], repository):
         """see plugin.py"""
-        self.__log_session(session)
         async with self.bitbucket_session(session) as bitbucket:
             try:
-                return bitbucket.workspaces.get(self.team).repositories.get(repository)
+                return bitbucket.workspaces.get(self.team).repositories.get(
+                    repository, by="name"
+                )
             except ApiPermissionError:
                 logging.info(
                     f'user "{session["user"]["user"]}" has no permission for "{repository}"'
@@ -372,7 +373,7 @@ class BitbucketCloud(SccsPlugin):
             deploys = sorted(deploys, key=lambda deploy: deploy[1])
 
             # Get continuous deployment config for all environments selected
-            env_configs: list[tuple[str, typing_cd.EnvironmentConfig]] = []
+
             for branch_name, index in deploys:
                 env_config = self.get_continuous_deployment_config_by_branch(
                     repository, repo, branch_name, self.cd_environments[index]
