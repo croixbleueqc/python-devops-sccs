@@ -146,16 +146,20 @@ class BitbucketCloud(SccsPlugin):
     async def close_session(self, session_id, session: dict[str, Any] | Cloud, args):
         """see plugin.py"""
         if isinstance(session, dict):
-            session["shared-session"] -= 1
+            try:
+                session["shared-session"] -= 1
 
-            logging.debug(
-                f'close session {session_id} (shared: {session["shared-session"]})'
-            )
+                logging.debug(
+                    f'close session {session_id} (shared: {session["shared-session"]})'
+                )
 
-            if session["shared-session"] <= 0:
-                # not used anymore
-                logging.debug(f"remove session {session_id} from cache")
-                self.local_sessions.pop(session_id)
+                if session["shared-session"] <= 0:
+                    # not used anymore
+                    logging.debug(f"remove session {session_id} from cache")
+                    self.local_sessions.pop(session_id)
+            except KeyError:
+                logging.warning('session["shared-session"] not found')
+                pass
 
     @asynccontextmanager
     async def bitbucket_session(
@@ -172,19 +176,19 @@ class BitbucketCloud(SccsPlugin):
 
         if isinstance(session, Cloud):
             yield session
-            return
-
-        # Regular flow
-        bitbucket: Cloud
-        try:
-            bitbucket = Cloud(
-                username=session["user"]["user"],
-                password=session["user"]["apikey"],
-                cloud=True,
-            )
-            yield bitbucket
-        finally:
-            bitbucket.close()
+        elif isinstance(session, dict):
+            # Regular flow
+            bitbucket: Cloud
+            try:
+                bitbucket = Cloud(
+                    username=session["user"]["user"],
+                    password=session["user"]["apikey"],
+                    cloud=True,
+                )
+                yield bitbucket
+            finally:
+                if bitbucket:
+                    bitbucket.close()
 
     async def accesscontrol(self, session: dict[str, Any], repository, action, args):
         """see plugin.py"""
