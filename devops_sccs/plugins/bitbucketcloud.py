@@ -18,6 +18,7 @@ import inspect
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, TypeAlias
+from urllib.error import HTTPError
 
 from atlassian.bitbucket import Cloud
 from atlassian.bitbucket.cloud.repositories import Repository
@@ -243,6 +244,25 @@ class BitbucketCloud(SccsPlugin):
                     f'user "{session["user"]["user"]}" has no permission for "{repository}"'
                 )
                 return
+
+    @ats_cache()
+    async def get_repository_permission(
+        self, session: dict[str, Any], repo_name: str
+    ) -> str | None:
+        async with self.bitbucket_session(session=session) as bitbucket:
+            # get repository permissions for user
+            try:
+                values = bitbucket.get(
+                    f"user/permissions/repositories",
+                    params={"repository.name": repo_name},
+                ).get("values", None)
+                if values and len(values) > 0:
+                    return values[0]["permission"]
+                else:
+                    return None
+            except HTTPError as e:
+                logging.warning(f"error getting repository permissions: {e}")
+                return None
 
     def _create_continuous_deployment_config_by_branch(
         self,
