@@ -278,7 +278,8 @@ class Provision(object):
         if len(cmd) == 0:
             return None
 
-        for arg, cfg in setup.get("args", {}).items():
+        args = setup.get("args") or {}
+        for arg, cfg in args.items():
             value = answers.get(arg)
 
             if value is None:

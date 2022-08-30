@@ -134,8 +134,6 @@ class BitbucketCloud(SccsPlugin):
                 username=session.username, password=session.password, cloud=True
             )
 
-        new_session = session
-
         self.local_sessions[session_id] = new_session
 
         return new_session
@@ -178,17 +176,15 @@ class BitbucketCloud(SccsPlugin):
             yield session
         elif isinstance(session, dict):
             # Regular flow
-            bitbucket: Cloud
+            bitbucket = Cloud(
+                username=session["user"]["user"],
+                password=session["user"]["apikey"],
+                cloud=True,
+            )
             try:
-                bitbucket = Cloud(
-                    username=session["user"]["user"],
-                    password=session["user"]["apikey"],
-                    cloud=True,
-                )
                 yield bitbucket
             finally:
-                if bitbucket:
-                    bitbucket.close()
+                bitbucket.close()
 
     async def accesscontrol(self, session: dict[str, Any], repository, action, args):
         """see plugin.py"""
