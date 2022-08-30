@@ -37,10 +37,10 @@ def init_plugin():
     Returns:
         str,object: unique id, plugin instance
     """
-    return "sccs", Sccs()
+    return "sccs", SccsPlugin()
 
 
-class Sccs(object):
+class SccsPlugin:
     """
     Abstract class to create a plugin
     """

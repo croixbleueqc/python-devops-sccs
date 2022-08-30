@@ -1,0 +1,12 @@
+[project]
+name = "devops_sccs"
+version = "1.0.0"
+description = "Source code control systems abstraction for DevOps"
+requires-python = ">=3.10"
+authors = [{ name = "Croix Bleue", email = "devops@qc.croixbleue.ca" }]
+license = { text = "LGPL-3.0-or-later" }
+dependencies = ["pygit2", "atlassian-python-api"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"

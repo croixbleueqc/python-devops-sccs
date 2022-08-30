@@ -37,7 +37,7 @@ def makekey(args: tuple, kwargs: dict):
     return hash_value
 
 
-def atscached(
+def ats_cache(
     maxsize: int | None = 1000,
     ttl: float = 3600.0,
     miss_callback: Callable = lambda _: _,
@@ -53,7 +53,7 @@ def atscached(
         A decorator that can be used to cache the results of a function.
 
     Example:
-        >>> @atscached()
+        >>> @ats_cache()
         >>> def now(*args):
                 return time.time()
         >>> a = now(1, 2) # cache miss; function called

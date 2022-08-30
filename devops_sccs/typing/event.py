@@ -21,21 +21,22 @@ Event triggered by the realtime module
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Typing2, Field
+from typing import Any
+from pydantic import BaseModel, Field
 from enum import Enum
 
 
-class EventType(Enum):
+class EventType(str, Enum):
     ADDED = "ADDED"
     MODIFIED = "MODIFIED"
     DELETED = "DELETED"
     INFO = "INFO"
 
-    def __str__(self):
-        return self.value
 
+class Event(BaseModel):  # AKA dataResponse
+    key: int
+    type: EventType = Field(alias="_type")
+    value: Any
 
-class Event(Typing2):
-    key = Field()
-    type_ = Field(instanciator=EventType).converter(dumps=str).mapping("type")
-    value = Field()
+    class Config:
+        json_encoders = {EventType: lambda t: str(t)}

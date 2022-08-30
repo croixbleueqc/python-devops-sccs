@@ -1,9 +1,3 @@
-"""
-Core module
-
-Core provides abstraction and plugins support to communicate with different source code control systems (sccs)
-"""
-
 # Copyright 2019 mickybart
 # Copyright 2020-2022 Croix Bleue du Québec
 
@@ -26,7 +20,6 @@ import glob
 import importlib.util
 import os
 import sys
-from multiprocessing import Manager
 
 from .context import Context
 from .errors import PluginAlreadyRegistered, PluginNotRegistered
@@ -37,7 +30,7 @@ from .provision import Provision
 from .realtime.scheduler import Scheduler
 
 
-class Core(object):
+class SccsClient(object):
 
     """
     Manages source code control systems
@@ -47,17 +40,17 @@ class Core(object):
     class ControlledContext:
         """Create/Delete context in a with statement"""
 
-        def __init__(self, core, plugin_id, args):
-            self.core = core
+        def __init__(self, client, plugin_id, session):
+            self.client = client
             self.plugin_id = plugin_id
-            self.args = args
+            self.session = session
 
         async def __aenter__(self):
-            self.ctx = await self.core.create_context(self.plugin_id, self.args)
+            self.ctx = await self.client.create_context(self.plugin_id, self.session)
             return self.ctx
 
         async def __aexit__(self, exc_type, exc, tb):
-            await self.core.delete_context(self.ctx)
+            await self.client.delete_context(self.ctx)
 
     def __init__(self):
         """Initialize plugins and internal modules"""
@@ -65,13 +58,12 @@ class Core(object):
         self.plugins = {}
         self.scheduler = Scheduler()
         self.provision: Provision
-        self.manager = Manager()
 
     @classmethod
     async def create(cls, config=None):
         if config is None:
             config = {}
-        self = Core()
+        self = SccsClient()
         if config.get("provision") is not None:
             self.provision = Provision(
                 config["provision"].get("checkout_base_path", "/tmp"),
@@ -152,7 +144,7 @@ class Core(object):
         plugin = self.plugins.pop(plugin_id)
         await plugin.cleanup()
 
-    async def create_context(self, plugin_id, args):
+    async def create_context(self, plugin_id, session):
         """Create a context
 
         A session and the real plugin will be embedded in a context.
@@ -163,17 +155,17 @@ class Core(object):
         if plugin is None:
             raise PluginNotRegistered(plugin_id)
 
-        session_id = plugin.get_session_id(args)
+        session_id = plugin.get_session_id(session)
 
-        session = await plugin.open_session(session_id, args)
+        s = await plugin.open_session(session_id, session)
 
-        return Context(session_id, session, plugin, self)
+        return Context(session_id, s, plugin, self)
 
     async def delete_context(self, context, args=None):
         """Delete a context by closing a session"""
 
         await context.plugin.close_session(context.session_id, context.session, args)
 
-    def context(self, plugin_id, args):
+    def context(self, plugin_id, session):
         """Controlled context to use in a with statement"""
-        return Core.ControlledContext(self, plugin_id, args)
+        return SccsClient.ControlledContext(self, plugin_id, session)
