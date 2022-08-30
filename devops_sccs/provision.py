@@ -272,7 +272,8 @@ class Provision(object):
         # Create the main command part.
         # We are trying to substitute repository_name that is the only variable supported for now
         cmd = []
-        for i in setup.get("cmd", []):
+        setup_cmd = setup.get("cmd") or []
+        for i in setup_cmd:
             cmd.append(i.format(repository_name=repository_name))
 
         if len(cmd) == 0:
