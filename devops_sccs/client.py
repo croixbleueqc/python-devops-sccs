@@ -25,7 +25,6 @@ from .context import Context
 from .errors import PluginAlreadyRegistered, PluginNotRegistered
 
 # Built-in plugins
-from .plugins import demo as plugin_demo
 from .provision import Provision
 from .realtime.scheduler import Scheduler
 
@@ -97,9 +96,7 @@ class SccsClient(object):
 
         builtin = plugins_config.get("builtin", {})
         config = plugins_config.get("config", {})
-        if builtin.get("demo", True):
-            plugin_id, plugin = plugin_demo.init_plugin()
-            await self.register(plugin_id, plugin, config.get("demo"))
+        # todo?
 
     async def load_external_plugins(self, plugins_config):
         """External plugins

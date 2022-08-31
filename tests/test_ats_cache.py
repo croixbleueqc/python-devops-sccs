@@ -258,7 +258,7 @@ def test_forced_fetch():
         return time()
 
     a = fn(0)
-    b = fn(0, fetch=True)
+    b = fn(0, fetch=True)  # type: ignore
 
     assert a != b
 
