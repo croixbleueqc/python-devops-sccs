@@ -252,10 +252,11 @@ class BitbucketCloud(SccsPlugin):
         async with self.bitbucket_session(session=session) as bitbucket:
             # get repository permissions for user
             try:
-                values = bitbucket.get(
+                res = bitbucket.get(
                     f"user/permissions/repositories",
                     params={"repository.name": repo_name},
-                ).get("values", None)
+                )
+                values = res.get("values", None) if res is not None else None
                 if values and len(values) > 0:
                     return values[0]["permission"]
                 else:
