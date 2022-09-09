@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import inspect
+import requests
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, TypeAlias
@@ -208,7 +209,11 @@ class BitbucketCloud(SccsPlugin):
             permission_repos = bitbucket.get(
                 "user/permissions/repositories", params={"pagelen": 100}
             )
-            while permission_repos is not None:
+            if permission_repos is None:
+                return result
+            if len(permission_repos["values"]) == 0:
+                return result
+            while True:
                 for repo in permission_repos["values"]:
                     result.append(
                         typing_repo.Repository(
@@ -221,9 +226,7 @@ class BitbucketCloud(SccsPlugin):
                     permission_repos = bitbucket.get(
                         permission_repos["next"], absolute=True
                     )
-                except Exception as e:
-                    logging.error(f"error getting next page: {e}")
-                    permission_repos = None
+                except Exception:
                     break
 
         return result
@@ -546,8 +549,6 @@ class BitbucketCloud(SccsPlugin):
         """
         Trigger a deployment in a specific environment
         """
-        logging.info(f"Trigger deploy for {repository} on {environment}")
-
         # Get Continuous Deployment configuration for the environment requested
         cd_environment_config: dict[str, Any] = {}
         for cd_environment in self.cd_environments:
@@ -567,14 +568,20 @@ class BitbucketCloud(SccsPlugin):
                 environments=[environment],
                 args=args,
             )
-            continuous_deployment = list_continuous_deployment[0]
 
             for config in list_continuous_deployment:
                 if config.environment == environment:
                     continuous_deployment = config
+                    break
 
-            logging.debug(
-                f"Trigger deploy on env : {environment} with on env : {continuous_deployment}"
+            if continuous_deployment is None:
+                logging.warning(
+                    f"Continuous deployment config not found for {repository} on environment {environment}"
+                )
+                utils_cd.trigger_not_supported(repository, environment)
+
+            logging.info(
+                f"Triggering new deploy on env : {environment} with version: {continuous_deployment.version}"
             )
 
             versions_available = (
@@ -623,16 +630,16 @@ class BitbucketCloud(SccsPlugin):
             else:
                 deploy_branch = None
 
-            # Upgrade/Downgrade request
-            repo.post(
-                path=f"src",
+            requests.request(
+                "POST",
+                repo.url + "/src",
                 data={
-                    cd_environment_config["version"]["file"]: f"{version}\n",
+                    f'/{cd_environment_config["version"]["file"]}': f"{version}\n",
                     "message": f"deploy version {version}",
                     "author": session["user"]["author"],
                     "branch": branch if deploy_branch is None else deploy_branch.name,
                 },
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                auth=(bitbucket.username, bitbucket.password),  # type: ignore
             )
 
             if deploy_branch is not None:
@@ -654,7 +661,7 @@ class BitbucketCloud(SccsPlugin):
             # race condition finish after that statement.
 
             # Return the new configuration (new version or PR in progress)
-        if not continuous_deployment:
+        if continuous_deployment is None:
             raise SccsException(
                 f"Couldn't find continuous deployment for {environment}"
             )
