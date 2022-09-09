@@ -22,7 +22,9 @@ class CacheExpired(CacheError, ValueError):
 CacheItem = namedtuple("CacheItem", ("expiry", "value"))
 CacheInfo = namedtuple("CacheInfo", ["hits", "misses", "maxsize", "currsize"])
 
-now = lambda: time.time()
+
+def now():
+    return time.time()
 
 
 def makekey(args: tuple, kwargs: dict):
