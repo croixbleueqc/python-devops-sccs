@@ -1,8 +1,8 @@
-import inspect
-from math import inf
 import time
+import weakref
 from collections import deque, namedtuple
 from functools import wraps
+from math import inf
 from threading import Lock, RLock
 from typing import Callable
 
@@ -44,7 +44,7 @@ def ats_cache(
     ttl: float = 3600.0,
     miss_callback: Callable = lambda _: _,
 ):
-    """An asynchronous, thread-safe, TLRU cache. Used to decorate expensive functions.
+    """An asynchronous, thread-safe, TLRU cache. Used to decorate expensive **methods**.
 
     Arguments:
         maxsize: The maximum number of items to store in the cache.
@@ -55,11 +55,13 @@ def ats_cache(
         A decorator that can be used to cache the results of a function.
 
     Example:
-        >>> @ats_cache()
-        >>> def now(*args):
-                return time.time()
-        >>> a = now(1, 2) # cache miss; function called
-        >>> b = now(1, 2) # cache hit; function not called
+        >>> class MyClass:
+        >>>     @ats_cache()
+        >>>     async def now(self, *args):
+                    return time.time()
+        >>> m = MyClass()
+        >>> a = m.now(1, 2) # cache miss; function called
+        >>> b = m.now(1, 2) # cache hit; function not called
         >>> assert a == b
 
     """
@@ -78,107 +80,52 @@ def ats_cache(
     # LRU priority queue
     pq: deque[str | int] = deque(maxlen=maxsize)
 
-    def impl(func):
-        if inspect.iscoroutinefunction(func):
+    def wrapper(func):
+        async def async_cache(_self, *args, fetch: bool = False, **kwargs):
+            nonlocal cache, hits, misses
 
-            @wraps(func)
-            async def async_wrapper(*args, fetch: bool = False, **kwargs):
-                nonlocal cache, hits, misses
+            key = makekey(args, kwargs)
 
-                key = makekey(args, kwargs)
+            try:
+                if key not in cache:
+                    raise CacheMiss
+                elif ttl != inf and cache[key].expiry < now():
+                    raise CacheExpired
+                elif fetch:
+                    raise CacheExpired
 
-                try:
-                    if key not in cache:
-                        raise CacheMiss
-                    elif ttl != inf and cache[key].expiry < now():
-                        raise CacheExpired
-                    elif fetch:
-                        raise CacheExpired
+                with r_lock:
+                    hits += 1
+                    pq.remove(key)
+                    pq.appendleft(key)
 
-                    with r_lock:
-                        hits += 1
-                        pq.remove(key)
-                        pq.appendleft(key)
+            except CacheMiss:
+                result = await func(_self(), *args, **kwargs)
 
-                except CacheMiss:
-                    result = await func(*args, **kwargs)
+                result = miss_callback(result)
 
-                    result = miss_callback(result)
+                node = CacheItem(expiry=now() + ttl, value=result)
 
-                    node = CacheItem(expiry=now() + ttl, value=result)
+                with w_lock:
+                    # remove oldest cache item if queue is full
+                    if len(pq) == maxsize:
+                        del cache[pq.pop()]
 
-                    with w_lock:
-                        # remove oldest cache item if queue is full
-                        if len(pq) == maxsize:
-                            del cache[pq.pop()]
+                    cache[key] = node
+                    pq.appendleft(key)
+                    misses += 1
 
-                        cache[key] = node
-                        pq.appendleft(key)
-                        misses += 1
+            except CacheExpired:
+                result = await func(_self(), *args, **kwargs)
 
-                except CacheExpired:
-                    result = await func(*args, **kwargs)
+                node = CacheItem(expiry=now() + ttl, value=result)
 
-                    node = CacheItem(expiry=now() + ttl, value=result)
+                with w_lock:
+                    cache[key] = node
+                    pq.appendleft(key)
+                    misses += 1
 
-                    with w_lock:
-                        cache[key] = node
-                        pq.appendleft(key)
-                        misses += 1
-
-                return cache[key].value
-
-            wrapper = async_wrapper
-        else:
-
-            @wraps(func)
-            def sync_wrapper(*args, fetch: bool = False, **kwargs):
-                nonlocal cache, hits, misses
-
-                key = makekey(args, kwargs)
-
-                try:
-                    if key not in cache:
-                        raise CacheMiss
-                    elif ttl != inf and cache[key].expiry < now():
-                        raise CacheExpired
-                    elif fetch:
-                        raise CacheExpired
-
-                    with r_lock:
-                        hits += 1
-                        pq.remove(key)
-                        pq.appendleft(key)
-
-                except CacheMiss:
-                    result = func(*args, **kwargs)
-
-                    result = miss_callback(result)
-
-                    node = CacheItem(expiry=now() + ttl, value=result)
-
-                    with w_lock:
-                        # remove oldest cache item if queue is full
-                        if len(pq) == maxsize:
-                            del cache[pq.pop()]
-
-                        cache[key] = node
-                        pq.appendleft(key)
-                        misses += 1
-
-                except CacheExpired:
-                    result = func(*args, **kwargs)
-
-                    node = CacheItem(expiry=now() + ttl, value=result)
-
-                    with w_lock:
-                        cache[key] = node
-                        pq.appendleft(key)
-                        misses += 1
-
-                return cache[key].value
-
-            wrapper = sync_wrapper
+            return cache[key].value
 
         def cache_info():
             """Report cache statistics."""
@@ -193,9 +140,13 @@ def ats_cache(
                 nonlocal hits, misses
                 hits = misses = 0
 
-        wrapper.cache_info = cache_info
-        wrapper.cache_clear = cache_clear
+        @wraps(func)
+        async def inner(self, *args, **kwargs):
+            return await async_cache(weakref.ref(self), *args, **kwargs)
 
-        return wrapper
+        inner.cache_info = cache_info
+        inner.cache_clear = cache_clear
 
-    return impl
+        return inner
+
+    return wrapper
