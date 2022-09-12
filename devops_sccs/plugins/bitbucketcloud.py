@@ -54,6 +54,7 @@ class BitbucketCloud(SccsPlugin):
         """
         Initialize the plugin
         """
+        logging.info("Initializing Bitbucket Cloud plugin...")
 
         self.local_sessions: dict[str, Any] = {}
 
@@ -98,7 +99,7 @@ class BitbucketCloud(SccsPlugin):
         else:
             raise SccsException("Invalid session")
 
-        logging.debug(f"get session id: {session_id}")
+        logging.debug(f"Created session id: {session_id}")
         return session_id
 
     async def open_session(self, session_id, session: dict[str, Any] | Cloud):
@@ -110,11 +111,9 @@ class BitbucketCloud(SccsPlugin):
             if isinstance(existing_session, dict):
                 existing_session["shared-session"] += 1
                 logging.debug(
-                    f'reuse session {session_id} (shared: {existing_session["shared-session"]})'
+                    f'Reusing existing session {session_id} (shared: {existing_session["shared-session"]})'
                 )
             return existing_session
-
-        logging.debug(f"create a new session {session_id}")
 
         new_session: dict[str, Any] | Cloud
         if isinstance(session, dict):
@@ -150,15 +149,15 @@ class BitbucketCloud(SccsPlugin):
                 session["shared-session"] -= 1
 
                 logging.debug(
-                    f'close session {session_id} (shared: {session["shared-session"]})'
+                    f'Closing session {session_id} (shared: {session["shared-session"]})'
                 )
 
                 if session["shared-session"] <= 0:
                     # not used anymore
-                    logging.debug(f"remove session {session_id} from cache")
+                    logging.debug(f"Removing session {session_id} from local cache")
                     self.local_sessions.pop(session_id)
-            except KeyError:
-                logging.warning('session["shared-session"] not found')
+            except KeyError as e:
+                logging.error(f"Error while closing session {session_id}: {e}")
                 pass
 
     @asynccontextmanager
@@ -190,7 +189,7 @@ class BitbucketCloud(SccsPlugin):
 
     async def accesscontrol(self, session: dict[str, Any], repository, action, args):
         """see plugin.py"""
-        logging.debug(f"access control for {repository}")
+        logging.debug(f"Assessing access rights for {repository}")
 
         async with self.bitbucket_session(session) as bitbucket:
             # will raise ApiPermissionError if access is forbidden
@@ -202,7 +201,8 @@ class BitbucketCloud(SccsPlugin):
 
     async def _get_repositories(self, session: dict[str, Any], args: Any) -> list:
         """see plugin.py"""
-        logging.debug(f"get user permission repositories")
+        logging.info("Getting list of repositories")
+
         result: list[typing_repo.Repository] = []
 
         async with self.bitbucket_session(session) as bitbucket:
@@ -243,7 +243,7 @@ class BitbucketCloud(SccsPlugin):
                     repository, by="name"
                 )
             except ApiPermissionError:
-                logging.info(
+                logging.warning(
                     f'user "{session["user"]["user"]}" has no permission for "{repository}"'
                 )
                 return
@@ -306,7 +306,7 @@ class BitbucketCloud(SccsPlugin):
         Get environment configuration for a specific branch
         """
         logging.debug(
-            f"_get_continuous_deployment_config_by_branch for repository '{repository}' on branch '{branch_name}'"
+            f"Getting continuous deployment config for '{repository}' on branch '{branch_name}'"
         )
         # Get version
         file_version = config["version"].get("file")
@@ -410,9 +410,7 @@ class BitbucketCloud(SccsPlugin):
                 )
                 results.append(env_config[1])
 
-            logging.debug(
-                f"_fetch_continuous_deployment_config for {repository} result is : {results}"
-            )
+        logging.debug(results)
         return results
 
     @ats_cache()
@@ -537,9 +535,8 @@ class BitbucketCloud(SccsPlugin):
         result = await self.fetch_continuous_deployment_versions_available(
             session=session, repository=repository, args=args
         )
-        logging.debug(
-            f"get_continuous_deployment_versions_available for repo : {repository}"
-        )
+        logging.debug(result)
+
         return result
 
     async def trigger_continuous_deployment(
@@ -574,7 +571,7 @@ class BitbucketCloud(SccsPlugin):
                     break
 
             if continuous_deployment is None:
-                logging.warning(
+                logging.info(
                     f"Continuous deployment config not found for {repository} on environment {environment}"
                 )
                 utils_cd.trigger_not_supported(repository, environment)
