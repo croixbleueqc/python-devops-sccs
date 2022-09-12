@@ -453,6 +453,7 @@ class BitbucketCloud(SccsPlugin):
             )
         return environments
 
+    @ats_cache(ttl=30)
     async def get_continuous_deployment_environments_available(
         self, session, repository, args
     ) -> list:
