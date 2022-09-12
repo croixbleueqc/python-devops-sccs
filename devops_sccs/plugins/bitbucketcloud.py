@@ -15,12 +15,12 @@
 from __future__ import annotations
 
 import inspect
-import requests
 import logging
 from contextlib import asynccontextmanager
 from typing import Any, TypeAlias
 from urllib.error import HTTPError
 
+import requests
 from atlassian.bitbucket import Cloud
 from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.errors import ApiNotFoundError, ApiPermissionError
@@ -28,7 +28,7 @@ from atlassian.errors import ApiNotFoundError, ApiPermissionError
 from ..accesscontrol import Action, Permission
 from ..ats_cache import ats_cache
 from ..client import SccsClient
-from ..errors import SccsException
+from ..errors import SccsException, TriggerCdEnvUnsupported, TriggerCdNotSupported
 from ..plugin import SccsPlugin
 from ..typing import cd as typing_cd
 from ..typing import repositories as typing_repo
@@ -256,7 +256,7 @@ class BitbucketCloud(SccsPlugin):
             # get repository permissions for user
             try:
                 res = bitbucket.get(
-                    f"user/permissions/repositories",
+                    "user/permissions/repositories",
                     params={"repository.name": repo_name},
                 )
                 values = res.get("values", None) if res is not None else None
@@ -359,13 +359,6 @@ class BitbucketCloud(SccsPlugin):
     @ats_cache()
     async def fetch_continuous_deployment_config(
         self, repository, session=None, environments=None
-    ):
-        return await self._fetch_continuous_deployment_config(
-            repository, session, environments
-        )
-
-    async def _fetch_continuous_deployment_config(
-        self, repository, session=None, environments=None
     ) -> list[typing_cd.EnvironmentConfig]:
         """
         fetch the version deployed in each environment
@@ -405,7 +398,7 @@ class BitbucketCloud(SccsPlugin):
             # Get continuous deployment config for all environments selected
 
             for branch_name, index in deploys:
-                env_config = self.get_continuous_deployment_config_by_branch(
+                env_config = await self.get_continuous_deployment_config_by_branch(
                     repository, repo, branch_name, self.cd_environments[index]
                 )
                 results.append(env_config[1])
@@ -557,7 +550,8 @@ class BitbucketCloud(SccsPlugin):
         continuous_deployment = None
         # using user session for repo manipulations
         async with self.bitbucket_session(session) as bitbucket:
-            # Check current configuration using the cache. This is ok because the user will see that deployed version anyway
+            # Check current configuration using the cache. This is ok because the user will see the
+            # deployed version anyway
             list_continuous_deployment = await self.get_continuous_deployment_config(
                 session=None,
                 repository=repository,
@@ -574,7 +568,7 @@ class BitbucketCloud(SccsPlugin):
                 logging.info(
                     f"Continuous deployment config not found for {repository} on environment {environment}"
                 )
-                utils_cd.trigger_not_supported(repository, environment)
+                raise TriggerCdEnvUnsupported(repository, environment)
 
             logging.info(
                 f"Triggering new deploy on env : {environment} with version: {continuous_deployment.version}"
@@ -657,10 +651,6 @@ class BitbucketCloud(SccsPlugin):
             # race condition finish after that statement.
 
             # Return the new configuration (new version or PR in progress)
-        if continuous_deployment is None:
-            raise SccsException(
-                f"Couldn't find continuous deployment for {environment}"
-            )
 
         return continuous_deployment
 
@@ -702,7 +692,7 @@ class BitbucketCloud(SccsPlugin):
             repo = bitbucket.workspaces.get(self.team).repositories.get(
                 repository=repo_name
             )
-            return repo.request(
+            repo.request(
                 method="DELETE",
                 path=f"hooks/{subscription_id}",
             )
