@@ -356,7 +356,6 @@ class BitbucketCloud(SccsPlugin):
             session=session, repository=repository, environments=environments
         )
 
-    @ats_cache()
     async def fetch_continuous_deployment_config(
         self, repository, session=None, environments=None
     ) -> list[typing_cd.EnvironmentConfig]:
