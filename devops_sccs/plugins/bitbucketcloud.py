@@ -292,8 +292,7 @@ class BitbucketCloud(SccsPlugin):
         )
         return env
 
-    @ats_cache()
-    def get_continuous_deployment_config_by_branch(
+    async def get_continuous_deployment_config_by_branch(
         self, repository: str, repo: Repository, branch_name: str, config: dict
     ) -> tuple[str, typing_cd.EnvironmentConfig]:
         return self._get_continuous_deployment_config_by_branch(
