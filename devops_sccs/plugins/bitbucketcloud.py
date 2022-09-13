@@ -349,15 +349,9 @@ class BitbucketCloud(SccsPlugin):
             ),
         )
 
+    @ats_cache(ttl=60)
     async def get_continuous_deployment_config(
-        self, session, repository, environments, args
-    ):
-        return await self.fetch_continuous_deployment_config(
-            session=session, repository=repository, environments=environments
-        )
-
-    async def fetch_continuous_deployment_config(
-        self, repository, session=None, environments=None
+        self, session, repository, environments=None, args=None
     ) -> list[typing_cd.EnvironmentConfig]:
         """
         fetch the version deployed in each environment
