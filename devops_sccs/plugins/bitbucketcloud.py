@@ -36,13 +36,6 @@ from ..utils import cd as utils_cd
 
 PLUGIN_NAME = "bitbucketcloud"
 
-
-# def init_plugin():
-#     if BitbucketCloud._instance is None:
-#         BitbucketCloud._instance = BitbucketCloud()
-#     return PLUGIN_NAME, BitbucketCloud._instance
-
-
 Session: TypeAlias = Cloud | dict[str, Any]
 
 
