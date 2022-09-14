@@ -70,10 +70,7 @@ class Provision(object):
             ui = {}
 
             # Setup part
-            if (
-                template.get("setup") is not None
-                and template["setup"].get("args") is not None
-            ):
+            if template.get("setup") is not None and template["setup"].get("args") is not None:
                 for arg, cfg in template["setup"]["args"].items():
                     ui[arg] = cfg.copy()
                     del ui[arg]["arg"]
@@ -118,18 +115,14 @@ class Provision(object):
         self.validate(self.repository_contract, repository)
 
         # Verify template (required or not and valid)
-        if self.main_contract["template_required"] and (
-            template is None or template == ""
-        ):
+        if self.main_contract["template_required"] and (template is None or template == ""):
             raise AnswerRequired("template")
 
         init_template_cmd = None
 
         if template is not None and template != "":
             if template not in self.templates.keys():
-                raise AnswerValidatorFailure(
-                    "template", "|".join(self.templates.keys())
-                )
+                raise AnswerValidatorFailure("template", "|".join(self.templates.keys()))
 
             # Verify template_params
             self.validate(self.templates_contract_cache[template], template_params)
@@ -359,13 +352,9 @@ class Provision(object):
         # Extract information from selected template
         template_from_url = self.templates[template]["from"]["git"]
         template_from_main_branch = self.templates[template]["from"]["main_branch"]
-        template_from_other_branches = self.templates[template]["from"].get(
-            "other_branches", []
-        )
+        template_from_other_branches = self.templates[template]["from"].get("other_branches", [])
 
-        checkout_path = os.path.join(
-            self.checkout_base_path, "".join(random.choices(string.ascii_letters, k=32))
-        )
+        checkout_path = os.path.join(self.checkout_base_path, "".join(random.choices(string.ascii_letters, k=32)))
 
         # Git part
         # see: https://github.com/MichaelBoselowitz/pygit2-examples/blob/master/examples.py
@@ -375,9 +364,7 @@ class Provision(object):
 
         # Git clone
         logging.debug(f"{destination}: cloning")
-        intermediate = pygit2.clone_repository(
-            destination, checkout_path, callbacks=callbacks
-        )
+        intermediate = pygit2.clone_repository(destination, checkout_path, callbacks=callbacks)
         if intermediate is None:
             raise SccsException(f"{destination}: clone failed")
 
@@ -385,14 +372,10 @@ class Provision(object):
         logging.debug(f"{destination}: adding template {template_from_url}")
         remote_template = intermediate.remotes.create("template", template_from_url)
         remote_template.fetch(callbacks=callbacks)
-        tpl_oid = intermediate.lookup_reference(
-            f"refs/remotes/template/{template_from_main_branch}"
-        ).target
+        tpl_oid = intermediate.lookup_reference(f"refs/remotes/template/{template_from_main_branch}").target
 
         # Git create branch based on template and checkout
-        logging.debug(
-            f"{destination}: creating main branch '{destination_main_branch}'"
-        )
+        logging.debug(f"{destination}: creating main branch '{destination_main_branch}'")
         commit = intermediate.get(tpl_oid)
         if not commit:
             raise SccsException(f"{destination}: commit not found")
@@ -401,9 +384,7 @@ class Provision(object):
 
         # Execute custom script
         if initialize_template_command is not None:
-            logging.debug(
-                f"{destination}: running cmd: {' '.join(initialize_template_command)}"
-            )
+            logging.debug(f"{destination}: running cmd: {' '.join(initialize_template_command)}")
             # TODO: Unsafe for now ! Needs chroot/proot to isolate execution from others
             # TODO: do not raise an exception to give us the chance to clean up all around first
 
@@ -413,9 +394,7 @@ class Provision(object):
             # Create commit
             logging.debug(f"{destination}: creating commit")
 
-            committer_signature = GitCredential.create_pygit2_signature(
-                git_credential.author
-            )
+            committer_signature = GitCredential.create_pygit2_signature(git_credential.author)
             if author is None:
                 author_signature = committer_signature
             else:
@@ -439,19 +418,13 @@ class Provision(object):
         additional_branches = []
         for template_branch, destination_branch in additional_branches_mapping:
             if destination_branch == destination_main_branch:
-                logging.warning(
-                    f"{destination}: override {destination_main_branch} is not allowed"
-                )
+                logging.warning(f"{destination}: override {destination_main_branch} is not allowed")
                 continue
             if template_branch not in template_from_other_branches:
-                logging.warning(
-                    f"{destination}: branch {template_branch} is not available for {template}"
-                )
+                logging.warning(f"{destination}: branch {template_branch} is not available for {template}")
                 continue
 
-            tpl_oid = intermediate.lookup_reference(
-                f"refs/remotes/template/{template_branch}"
-            ).target
+            tpl_oid = intermediate.lookup_reference(f"refs/remotes/template/{template_branch}").target
             commit = intermediate.get(tpl_oid)
             if not commit:
                 raise SccsException(f"{destination}: commit not found")

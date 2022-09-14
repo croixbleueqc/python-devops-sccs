@@ -26,4 +26,4 @@ from . import WatcherType
 
 class Repository(WatcherType):
     name: str
-    permission: str
+    permission: str | None = None

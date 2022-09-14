@@ -28,6 +28,14 @@ from .errors import PluginAlreadyRegistered, PluginNotRegistered
 from .provision import Provision
 from .realtime.scheduler import Scheduler
 
+plugins = {}
+
+
+def register_plugin(name, plugin):
+    if name in plugins:
+        raise PluginAlreadyRegistered(name)
+    plugins[name] = plugin
+
 
 class SccsClient(object):
 
@@ -54,7 +62,6 @@ class SccsClient(object):
     def __init__(self):
         """Initialize plugins and internal modules"""
 
-        self.plugins = {}
         self.scheduler = Scheduler()
         self.provision: Provision
 
@@ -71,9 +78,10 @@ class SccsClient(object):
                 templates=config["provision"].get("templates", {}),
             )
 
-        await self.load_builtin_plugins(config.get("plugins", {}))
+        plugins_config = config.get("plugins", {})
+        await self.load_builtin_plugins(plugins_config)
 
-        await self.load_external_plugins(config.get("plugins", {}))
+        await self.load_external_plugins(plugins_config)
 
         return self
 
@@ -84,7 +92,8 @@ class SccsClient(object):
         # if self.enableHook:
         #     self.hookServer.stop_server()
         #
-        for plugin_id in list(self.plugins.keys()):
+        global plugins
+        for plugin_id in list(plugins.keys()):
             await self.unregister(plugin_id)
 
     async def load_builtin_plugins(self, plugins_config):
@@ -94,8 +103,8 @@ class SccsClient(object):
         By default all built-in plugins will be loaded
         """
 
-        builtin = plugins_config.get("builtin", {})
-        config = plugins_config.get("config", {})
+        # builtin = plugins_config.get("builtin", {})
+        # config = plugins_config.get("config", {})
         # todo?
 
     async def load_external_plugins(self, plugins_config):
@@ -126,19 +135,20 @@ class SccsClient(object):
             if spec.loader is not None:
                 spec.loader.exec_module(mod)
 
-            plugin_id, plugin = mod.init_plugin()
-            await self.register(plugin_id, plugin, config.get(plugin_id))
+            await self.init_plugin(mod.PLUGIN_NAME, config.get(mod.PLUGIN_NAME, {}))
+            # await self.register(plugin_id, plugin, config.get(plugin_id))
 
-    async def register(self, plugin_id, plugin, config):
+    async def init_plugin(self, plugin_name, config):
         """Register a plugin to make it available"""
-        if plugin_id in self.plugins:
-            raise PluginAlreadyRegistered(plugin_id)
+        global plugins
+        if plugin_name not in plugins:
+            raise PluginNotRegistered(plugin_name)
 
-        await plugin.init(self, config)
-        self.plugins[plugin_id] = plugin
+        await plugins[plugin_name].init(self, config)
 
     async def unregister(self, plugin_id):
-        plugin = self.plugins.pop(plugin_id)
+        global plugins
+        plugin = plugins.pop(plugin_id)
         await plugin.cleanup()
 
     async def create_context(self, plugin_id, session):
@@ -148,7 +158,8 @@ class SccsClient(object):
 
         This is the main entry point to communicate with the sccs
         """
-        plugin = self.plugins.get(plugin_id)
+        global plugins
+        plugin = plugins.get(plugin_id)
         if plugin is None:
             raise PluginNotRegistered(plugin_id)
 
