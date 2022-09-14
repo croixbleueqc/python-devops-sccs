@@ -203,9 +203,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def add_repository(
-        self, session, provision, repository, template, template_params, args
-    ):
+    async def add_repository(self, session, provision, repository, template, template_params, args):
         """Add a new repository
 
         The main workflow is:
@@ -228,9 +226,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_continuous_deployment_config(
-        self, session, repository, environments, args
-    ):
+    async def get_continuous_deployment_config(self, session, repository, environments, args):
         """Get continuous deployment configuration
 
         This is not the real state of the deployment in your "production" environment but the state expected
@@ -248,9 +244,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_continuous_deployment_versions_available(
-        self, session, repository, args=None
-    ):
+    async def get_continuous_deployment_versions_available(self, session, repository, args=None):
         """Get continuous deployment versions available
 
         @abstractmethod
@@ -269,9 +263,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def trigger_continuous_deployment(
-        self, session, repository, environment, version, args
-    ):
+    async def trigger_continuous_deployment(self, session, repository, environment, version, args):
         """Trigger a continuous deployment
 
         Args:
@@ -287,9 +279,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_continuous_deployment_environments_available(
-        self, session, repository, args
-    ):
+    async def get_continuous_deployment_environments_available(self, session, repository, args):
         """List all environments that can be used to run the application
 
         Args:
@@ -303,9 +293,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def bridge_repository_to_namespace(
-        self, session, repository, environment, untrustable, args
-    ):
+    async def bridge_repository_to_namespace(self, session, repository, environment, untrustable, args):
         """Bridge repository/environment to a kubernetes namespace
 
         EXPERIMENTAL FEATURE
@@ -370,9 +358,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def compliance_repository(
-        self, session, repository, remediation, report, args
-    ):
+    async def compliance_repository(self, session, repository, remediation, report, args):
         """Check if a repository is compliant
 
         No remediation should be done by default if a repository is not compliant.

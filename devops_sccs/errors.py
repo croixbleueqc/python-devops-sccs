@@ -23,9 +23,7 @@ class SccsException(Exception):
 
 class PluginAlreadyRegistered(SccsException):
     def __init__(self, plugin_id):
-        super().__init__(
-            f"{plugin_id} already exist. Please verify that another plugin do not overlap it."
-        )
+        super().__init__(f"{plugin_id} already exist. Please verify that another plugin do not overlap it.")
 
 
 class PluginNotRegistered(SccsException):
@@ -40,9 +38,7 @@ class AnswerRequired(SccsException):
 
 class AnswerValidatorFailure(SccsException):
     def __init__(self, arg, validator):
-        super().__init__(
-            f"Argument {arg} failed to be validate with the regex {validator}"
-        )
+        super().__init__(f"Argument {arg} failed to be validate with the regex {validator}")
 
 
 class TriggerCdReadOnly(SccsException):
@@ -67,16 +63,12 @@ class TriggerCdVersionUnsupported(SccsException):
 
 class TriggerCdVersionAlreadyDeployed(SccsException):
     def __init__(self, repository, environment, version):
-        super().__init__(
-            f"Version {version} is already deployed in {environment} for {repository}"
-        )
+        super().__init__(f"Version {version} is already deployed in {environment} for {repository}")
 
 
 class AuthorSyntax(SccsException):
     def __init__(self, author):
-        super().__init__(
-            f"Author {author} is not compliant with the format 'user <user@domain.tld>'"
-        )
+        super().__init__(f"Author {author} is not compliant with the format 'user <user@domain.tld>'")
 
 
 class AccessForbidden(SccsException):

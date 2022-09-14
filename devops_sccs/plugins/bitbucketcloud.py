@@ -52,26 +52,16 @@ class BitbucketCloud(SccsPlugin):
 
         self.team = config["team"]
 
-        self.cd_environments: list[dict[str, Any]] = config["continuous_deployment"][
-            "environments"
-        ]
-        self.cd_branches_accepted: list[str] = [
-            env["branch"] for env in self.cd_environments
-        ]
-        self.cd_pullrequest_tag: str = config["continuous_deployment"]["pullrequest"][
-            "tag"
-        ]
-        self.cd_versions_available: list[str] = config["continuous_deployment"][
-            "pipeline"
-        ]["versions_available"]
+        self.cd_environments: list[dict[str, Any]] = config["continuous_deployment"]["environments"]
+        self.cd_branches_accepted: list[str] = [env["branch"] for env in self.cd_environments]
+        self.cd_pullrequest_tag: str = config["continuous_deployment"]["pullrequest"]["tag"]
+        self.cd_versions_available: list[str] = config["continuous_deployment"]["pipeline"]["versions_available"]
 
         self.watcherUser: str = config["watcher"]["user"]
         self.watcherPwd: str = config["watcher"]["pwd"]
 
         if config["watcher"] is not None:
-            self.watcher = Cloud(
-                username=self.watcherUser, password=self.watcherPwd, cloud=True
-            )
+            self.watcher = Cloud(username=self.watcherUser, password=self.watcherPwd, cloud=True)
 
         self.accesscontrol_rules: dict[int, list[str]] = {
             Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG: Permission.READ_CAPABILITIES,
@@ -105,9 +95,7 @@ class BitbucketCloud(SccsPlugin):
         if existing_session is not None:
             if isinstance(existing_session, dict):
                 existing_session["shared-session"] += 1
-                logging.debug(
-                    f'Reusing existing session {session_id} (shared: {existing_session["shared-session"]})'
-                )
+                logging.debug(f'Reusing existing session {session_id} (shared: {existing_session["shared-session"]})')
             return existing_session
 
         new_session: dict[str, Any] | Cloud
@@ -121,14 +109,10 @@ class BitbucketCloud(SccsPlugin):
                     "team": self.team,
                     "author": session["author"],
                 },
-                "cache": {
-                    "repositories": {"values": [], "last_access": 0, "ttl": 7200}
-                },
+                "cache": {"repositories": {"values": [], "last_access": 0, "ttl": 7200}},
             }
         elif isinstance(session, Cloud):
-            new_session = Cloud(
-                username=session.username, password=session.password, cloud=True
-            )
+            new_session = Cloud(username=session.username, password=session.password, cloud=True)
 
         self.local_sessions[session_id] = new_session
 
@@ -140,9 +124,7 @@ class BitbucketCloud(SccsPlugin):
             try:
                 session["shared-session"] -= 1
 
-                logging.debug(
-                    f'Closing session {session_id} (shared: {session["shared-session"]})'
-                )
+                logging.debug(f'Closing session {session_id} (shared: {session["shared-session"]})')
 
                 if session["shared-session"] <= 0:
                     # not used anymore
@@ -164,25 +146,25 @@ class BitbucketCloud(SccsPlugin):
         return await super().passthrough(session, request, args)
 
     @ats_cache()
-    async def get_repositories(
-        self, session: dict[str, Any], args: Any = None
-    ) -> list[typing_repo.Repository]:
+    async def get_repositories(self, session: dict[str, Any], args: Any = None) -> list[typing_repo.Repository]:
         """see plugin.py"""
-        logging.info("Getting list of repositories")
 
         result: list[typing_repo.Repository] = []
 
         async with self.bitbucket_session(session) as bitbucket:
             permission_repos: dict[str, Any] | None = bitbucket.get(
                 "user/permissions/repositories", params={"pagelen": 100}
-            )
-            if permission_repos is None:
-                return result
-            else:
-                repos: list[dict] = permission_repos["values"]
-            if len(repos) == 0:
-                return result
+            )  # type: ignore
             while True:
+                if permission_repos is None:
+                    return result
+
+                repos: list[dict] = permission_repos["values"]
+                next: str | None = permission_repos.get("next")
+
+                if len(repos) == 0:
+                    return result
+
                 for repo in repos:
                     result.append(
                         typing_repo.Repository(
@@ -191,41 +173,30 @@ class BitbucketCloud(SccsPlugin):
                             permission=repo["permission"],
                         )
                     )
+
+                if next is None:
+                    break
                 try:
-                    permission_repos = bitbucket.get(
-                        permission_repos["next"], absolute=True
-                    )
+                    permission_repos = bitbucket.get(next, absolute=True)  # type: ignore
                 except Exception:
                     break
 
         return result
 
     @ats_cache()
-    async def get_repository(
-        self, session, repository
-    ) -> typing_repo.Repository | None:
+    async def get_repository(self, session, repository):
         """see plugin.py"""
         async with self.bitbucket_session(session) as bitbucket:
             try:
-                repo = bitbucket.workspaces.get(self.team).repositories.get(
-                    repository, by="name"
-                )
-                return typing_repo.Repository(
-                    key=hash(repo.name),
-                    name=repo.name if repo.name is not None else "",
-                )
+                return bitbucket.workspaces.get(self.team).repositories.get(repository, by="name")
             except ApiPermissionError:
-                logging.warning(
-                    f'user "{session["user"]["user"]}" has no permission for "{repository}"'
-                )
+                logging.warning(f'user "{session["user"]["user"]}" has no permission for "{repository}"')
                 return None
             except Exception:
                 logging.warning(f"repository {repository} not found")
                 return None
 
-    async def add_repository(
-        self, session, provision, repository, template, template_params, args
-    ):
+    async def add_repository(self, session, provision, repository, template, template_params, args):
         pass
 
     @ats_cache(ttl=60)
@@ -239,29 +210,20 @@ class BitbucketCloud(SccsPlugin):
 
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
             deploys = []
-            repo = bitbucket.workspaces.get(self.team).repositories.get(
-                repository=repository
-            )
+            repo = bitbucket.workspaces.get(self.team).repositories.get(repository=repository)
 
             # Get supported branches
             for branch in repo.branches.each():
                 try:
                     index = self.cd_branches_accepted.index(branch.name)
-                    if (
-                        environments is None
-                        or self.cd_environments[index]["name"] in environments
-                    ):
+                    if environments is None or self.cd_environments[index]["name"] in environments:
                         deploys.append((branch.name, index))
                 except ValueError:
                     pass
 
             # Do we have something to do ?
             if len(deploys) == 0:
-                logging.info(
-                    "continuous deployment seems not supported for {}".format(
-                        repository
-                    )
-                )
+                logging.info("continuous deployment seems not supported for {}".format(repository))
                 return results
 
             # Ordered deploys
@@ -285,45 +247,30 @@ class BitbucketCloud(SccsPlugin):
         """
         Get the list of version available to deploy
         """
-        logging.info(
-            f"_fetch_continuous_deployment_versions_available on repo : {repository}"
-        )
+        logging.info(f"_fetch_continuous_deployment_versions_available on repo : {repository}")
 
         self.__log_session(session)
         versions = []
         async with self.bitbucket_session(session, self.watcher) as bitbucket:
 
-            repo = bitbucket.workspaces.get(self.team).repositories.get(
-                repository=repository
-            )
+            repo = bitbucket.workspaces.get(self.team).repositories.get(repository=repository)
 
             logging.info(f"list cd version available : {self.cd_versions_available}")
 
-            for pipeline in repo.pipelines.each(
-                q="target.ref_name=master", sort="-created_on"
-            ):
+            for pipeline in repo.pipelines.each(q="target.ref_name=master", sort="-created_on"):
                 target = pipeline.get_data("target")
                 state = pipeline.get_data("state")
-                if (
-                    target is None
-                    or state is None
-                    or target["type"] != "pipeline_ref_target"
-                ):
+                if target is None or state is None or target["type"] != "pipeline_ref_target":
                     continue
                 ref_name = target["ref_name"]
                 result_name = state["result"]["name"]
-                if (
-                    ref_name in self.cd_versions_available
-                    and result_name == "SUCCESSFUL"
-                ):
+                if ref_name in self.cd_versions_available and result_name == "SUCCESSFUL":
                     available = typing_cd.Available(
                         key=hash((repository, pipeline.build_number)),
                         build=str(pipeline.build_number),
                         version=target["commit"]["hash"],
                     )
-                    logging.debug(
-                        f"adding version available for build nb : {pipeline.build_number}"
-                    )
+                    logging.debug(f"adding version available for build nb : {pipeline.build_number}")
                     versions.append(available)
 
         return versions
@@ -361,20 +308,12 @@ class BitbucketCloud(SccsPlugin):
                     break
 
             if continuous_deployment is None:
-                logging.info(
-                    f"Continuous deployment config not found for {repository} on environment {environment}"
-                )
+                logging.info(f"Continuous deployment config not found for {repository} on environment {environment}")
                 raise TriggerCdEnvUnsupported(repository, environment)
 
-            logging.info(
-                f"Triggering new deploy on env : {environment} with version: {continuous_deployment.version}"
-            )
+            logging.info(f"Triggering new deploy on env : {environment} with version: {continuous_deployment.version}")
 
-            versions_available = (
-                await self.get_continuous_deployment_versions_available(
-                    None, repository, args
-                )
-            )
+            versions_available = await self.get_continuous_deployment_versions_available(None, repository, args)
 
             utils_cd.trigger_prepare(
                 continuous_deployment,
@@ -385,9 +324,7 @@ class BitbucketCloud(SccsPlugin):
             )
 
             # Check if we need/can do a PR
-            repo = bitbucket.workspaces.get(self.team).repositories.get(
-                repository=repository
-            )
+            repo = bitbucket.workspaces.get(self.team).repositories.get(repository=repository)
             branch = cd_environment_config["branch"]
 
             if cd_environment_config.get("trigger", {}).get("pullrequest", False):
@@ -457,17 +394,11 @@ class BitbucketCloud(SccsPlugin):
         result = await self.get_continuous_deployment_config(
             session=session, repository=repository, environments=None, args=args
         )
-        logging.debug(
-            f"get_continuous_deployment_environments_available on repo : {repository} --- result : {result}"
-        )
+        logging.debug(f"get_continuous_deployment_environments_available on repo : {repository} --- result : {result}")
         return result
 
-    async def bridge_repository_to_namespace(
-        self, session, repository, environment, untrustable, args
-    ):
-        return await super().bridge_repository_to_namespace(
-            session, repository, environment, untrustable, args
-        )
+    async def bridge_repository_to_namespace(self, session, repository, environment, untrustable, args):
+        return await super().bridge_repository_to_namespace(session, repository, environment, untrustable, args)
 
     async def compliance(self, session, remediation, report, args):
         return await super().compliance(session, remediation, report, args)
@@ -475,12 +406,8 @@ class BitbucketCloud(SccsPlugin):
     async def compliance_report(self, session, args):
         return await super().compliance_report(session, args)
 
-    async def compliance_repository(
-        self, session, repository, remediation, report, args
-    ):
-        return await super().compliance_repository(
-            session, repository, remediation, report, args
-        )
+    async def compliance_repository(self, session, repository, remediation, report, args):
+        return await super().compliance_repository(session, repository, remediation, report, args)
 
     async def compliance_report_repository(self, session, repository, args):
         return await super().compliance_report_repository(session, repository, args)
@@ -510,9 +437,7 @@ class BitbucketCloud(SccsPlugin):
             version=version,
             environment=config["name"],
             readonly=not trigger_config.get("enabled", True),
-            pullrequest=pullrequest
-            if trigger_config.get("pullrequest", False)
-            else None,
+            pullrequest=pullrequest if trigger_config.get("pullrequest", False) else None,
         )
         return env
 
@@ -522,24 +447,23 @@ class BitbucketCloud(SccsPlugin):
         """
         Get environment configuration for a specific branch
         """
-        logging.debug(
-            f"Getting continuous deployment config for '{repository}' on branch '{branch_name}'"
-        )
+        logging.debug(f"Getting continuous deployment config for '{repository}' on branch '{branch_name}'")
         # Get version
         file_version = config["version"].get("file")
         commit_hash = repo.branches.get(branch_name).hash
         version: str
         if file_version is not None:
-            res: bytes | None = repo.get(
-                path=f"src/{commit_hash}/{file_version}",
-                not_json_response=True,
-            )
-            if res is not None:
-                version = res.decode("utf-8")
-            else:
-                raise SccsException(
-                    f"failed to get version from {file_version} for {repository} on {branch_name}"
+            try:
+                res: bytes | None = repo.get(
+                    path=f"src/{commit_hash}/{file_version}",
+                    not_json_response=True,
                 )
+                if res is not None:
+                    version = res.decode("utf-8")
+                else:
+                    raise SccsException(f"failed to get version from {file_version} for {repository} on {branch_name}")
+            except Exception:
+                raise SccsException(f"failed to get version from {file_version} for {repository} on {branch_name}")
         elif config["version"].get("git") is not None:
             version = commit_hash
         else:
@@ -567,9 +491,7 @@ class BitbucketCloud(SccsPlugin):
         )
 
     @ats_cache()
-    async def get_repository_permission(
-        self, session: dict[str, Any], repo_name: str
-    ) -> str | None:
+    async def get_repository_permission(self, session: dict[str, Any], repo_name: str) -> str | None:
         async with self.bitbucket_session(session=session) as bitbucket:
             # get repository permissions for user
             try:
@@ -595,9 +517,7 @@ class BitbucketCloud(SccsPlugin):
     @ats_cache()
     async def get_webhook_subscriptions(self, session, repo_name):
         async with self.bitbucket_session(session) as bitbucket:
-            repo = bitbucket.workspaces.get(self.team).repositories.get(
-                repository=repo_name
-            )
+            repo = bitbucket.workspaces.get(self.team).repositories.get(repository=repo_name)
             return repo.get(path="hooks")
 
     async def create_webhook_subscription(
@@ -610,9 +530,7 @@ class BitbucketCloud(SccsPlugin):
         description,
     ):
         async with self.bitbucket_session(session) as bitbucket:
-            repo = bitbucket.workspaces.get(self.team).repositories.get(
-                repository=repo_name
-            )
+            repo = bitbucket.workspaces.get(self.team).repositories.get(repository=repo_name)
             return repo.post(
                 path="hooks",
                 json={
@@ -623,13 +541,9 @@ class BitbucketCloud(SccsPlugin):
                 },
             )
 
-    async def delete_webhook_subscription(
-        self, session, repo_name, subscription_id
-    ) -> None:
+    async def delete_webhook_subscription(self, session, repo_name, subscription_id) -> None:
         async with self.bitbucket_session(session) as bitbucket:
-            repo = bitbucket.workspaces.get(self.team).repositories.get(
-                repository=repo_name
-            )
+            repo = bitbucket.workspaces.get(self.team).repositories.get(repository=repo_name)
             repo.request(
                 method="DELETE",
                 path=f"hooks/{subscription_id}",
