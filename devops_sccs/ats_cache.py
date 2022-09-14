@@ -1,3 +1,4 @@
+import logging
 import time
 import weakref
 from collections import deque, namedtuple
@@ -8,14 +9,17 @@ from typing import Callable
 
 
 class CacheError(Exception):
+    logging.error("CacheError")
     pass
 
 
 class CacheMiss(CacheError, KeyError):
+    logging.debug("Cache miss")
     pass
 
 
 class CacheExpired(CacheError, ValueError):
+    logging.debug("Cache expired")
     pass
 
 
@@ -125,6 +129,7 @@ def ats_cache(
                     pq.appendleft(key)
                     misses += 1
 
+            logging.debug(f"Cache hits: {hits}, misses: {misses}")
             return cache[key].value
 
         def cache_info():
