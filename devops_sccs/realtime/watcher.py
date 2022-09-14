@@ -42,9 +42,7 @@ class Watcher(object):
         def get_exception(self):
             return self.exception
 
-    def __init__(
-        self, watcher_id: int, poll_interval: int, func: Callable, *args, **kwargs
-    ):
+    def __init__(self, watcher_id: int, poll_interval: int, func: Callable, *args, **kwargs):
         # Id
         self.wid = watcher_id
 
