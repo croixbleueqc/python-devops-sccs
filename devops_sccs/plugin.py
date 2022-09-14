@@ -28,24 +28,29 @@ IMPORTANT: If you consider that some features are enough generic and can help ot
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 
-def init_plugin():
-    """
-    Entrypoint to register a plugin.
-
-    id has to be unique. You can't register 2 plugins with the same id
-
-    Returns:
-        str,object: unique id, plugin instance
-    """
-    return "sccs", SccsPlugin()
+from abc import ABC, abstractmethod
+from typing import Any
 
 
-class SccsPlugin:
+# def init_plugin():
+#     """
+#     Entrypoint to register a plugin.
+
+#     id has to be unique. You can't register 2 plugins with the same id
+
+#     Returns:
+#         str,object: unique id, plugin instance
+#     """
+#     return "sccs", SccsPlugin.__call__()
+
+
+class SccsPlugin(ABC):
     """
     Abstract class to create a plugin
     """
 
-    async def init(self, core, args):
+    @abstractmethod
+    async def init(self, core, config: dict[str, Any]):
         """
         Initialize the plugin
 
@@ -53,7 +58,8 @@ class SccsPlugin:
         This is where you can initialize everything that is not relative to a session.
 
         Advanced examples:
-        - if you want to share some sessions across different instances, this is where you can init database, cache or whatever you want.
+        - if you want to share some sessions across different instances, this is where you can init database, cache or
+          whatever you want.
         - if you need a kind of root user to do some specific operations not available to a regular user,
           this is where you can store those informations to use them when required
 
@@ -63,13 +69,15 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def cleanup(self):
         """
         Cleanup the plugin as it will be removed
         """
         raise NotImplementedError()
 
-    def get_session_id(self, args):
+    @abstractmethod
+    def get_session_id(self, session):
         """
         Permit to generate the same session id for the same significant arguments.
 
@@ -78,22 +86,25 @@ class SccsPlugin:
         This is a purely internal plugin use.
 
         Args:
-            args(dict): extra configuration
+            session(dict): extra configuration
 
         Returns:
             str: a session id
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def open_session(self, session_id, args):
         """
         Open a session
 
-        Session is an abstract concept that will be stored in a Core.Context. This is up to the plugin to define what should be a session.
+        Session is an abstract concept that will be stored in a Core.Context. This is up to the plugin to define what
+        should be a session.
 
         A session can be :
         - nothing (None) if you want to use a global user (see root user usage in init())
-        - object that will identify a regular user (provided with args) to run as much as possible commands against your sccs with effective user credential
+        - object that will identify a regular user (provided with args) to run as much as possible commands against
+          your sccs with effective user credential
         - object like a library client instance on your specific sccs.
         - ...
 
@@ -103,10 +114,12 @@ class SccsPlugin:
         - if it doesn't exist, open a new one and store it in the cache/database/...
 
         Simple example:
-        - just return args as the session. Args should include everything that will permit all other functions to query the sccs.
+        - just return args as the session. Args should include everything that will permit all other functions to query
+          the sccs.
 
         Extra easy example with a "root user":
-        - return None: we don't need anything as we will rely only on the root user / connection created in init() stage (for auditability and security you should not do that)
+        - return None: we don't need anything as we will rely only on the root user / connection created in init()
+          stage (for auditability and security you should not do that)
 
         Args:
             args(dict): extra arguments required to open a session
@@ -116,6 +129,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def close_session(self, session_id, session, args):
         """Close a session
 
@@ -125,6 +139,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def accesscontrol(self, session, repository, action, args):
         """Access Control
 
@@ -141,6 +156,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def passthrough(self, session, request, args):
         """Passthrough
 
@@ -156,6 +172,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def get_repositories(self, session, args):
         """Get a list of repositories (with permission for each)
 
@@ -170,6 +187,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def get_repository(self, session, repository, *args, **kwargs):
         """Get a specific repository (with permission)
 
@@ -184,6 +202,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def add_repository(
         self, session, provision, repository, template, template_params, args
     ):
@@ -208,6 +227,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def get_continuous_deployment_config(
         self, session, repository, environments, args
     ):
@@ -227,23 +247,28 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def get_continuous_deployment_versions_available(
         self, session, repository, args=None
     ):
         """Get continuous deployment versions available
 
-        This is a list of versions that can be used to trigger a continuous deployment
+        @abstractmethod
+        @abstractmethod
+        @abstractmethod
+            This is a list of versions that can be used to trigger a continuous deployment
 
-        Args:
-            session(object): the session
-            repository(str): the repository name
-            args(dict): extr arguments to handle the operation
+            Args:
+                session(object): the session
+                repository(str): the repository name
+                args(dict): extr arguments to handle the operation
 
-        Returns:
-            list(typing.cd.Available): Versions available
+            Returns:
+                list(typing.cd.Available): Versions available
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def trigger_continuous_deployment(
         self, session, repository, environment, version, args
     ):
@@ -261,6 +286,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def get_continuous_deployment_environments_available(
         self, session, repository, args
     ):
@@ -276,6 +302,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def bridge_repository_to_namespace(
         self, session, repository, environment, untrustable, args
     ):
@@ -283,10 +310,12 @@ class SccsPlugin:
 
         EXPERIMENTAL FEATURE
 
-        The bridge permit to provide the namespace associated with a repository. This API is really experimental because it assumes
-        that a repository equal one namepace. This is a wrong assumption and will need to be reviewed.
+        The bridge permit to provide the namespace associated with a repository. This API is really experimental
+        because it assumes that a repository equal one namepace. This is a wrong assumption and will need to be
+        reviewed.
 
-        This function will be called in an untrustable way by the kubernetes backend. Kubernetes backend will fully rely on sccs to validate the request.
+        This function will be called in an untrustable way by the kubernetes backend. Kubernetes backend will fully
+        rely on sccs to validate the request.
 
         Return dict object:
         {
@@ -301,7 +330,8 @@ class SccsPlugin:
             session(object): the session
             repository(str): the repository name
             environment(str): the environment (eg: production, development, qa, ...)
-            unstrustable(bool): used to enforce controls on the plugin to distinguish a critical request from the kubernetes backend
+            unstrustable(bool): used to enforce controls on the plugin to distinguish a critical request from the
+            kubernetes backend
             args(dict): extr arguments to handle the operation
 
         Returns:
@@ -309,6 +339,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def compliance(self, session, remediation, report, args):
         """Check if all repositories are compliants
 
@@ -329,6 +360,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def compliance_report(self, session, args):
         """Provides a compliance report about all repositories
 
@@ -337,6 +369,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def compliance_repository(
         self, session, repository, remediation, report, args
     ):
@@ -360,6 +393,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def compliance_report_repository(self, session, repository, args):
         """Provides a compliance report for the repository
 
@@ -368,6 +402,7 @@ class SccsPlugin:
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def get_hooks_repository(self, session, repository, args):
         """Check if a repository is compliant
 
