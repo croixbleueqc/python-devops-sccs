@@ -245,16 +245,18 @@ class BitbucketCloud(SccsApi):
             session, provision, repo_definition, template, template_params
         )
 
-    @ats_cache()
     async def get_continuous_deployment_config(
             self,
-            session: Cloud,
+            session: Cloud | None,
             repo_name: str,
             environments=[],
     ) -> list[typing_cd.EnvironmentConfig]:
         """
         fetch the version deployed in each environment
         """
+        if session is None:
+            session = self.watcher
+
         results: list[typing_cd.EnvironmentConfig] = []
 
         repo = session.workspaces.get(self.team).repositories.get(repo_name, by="name")
@@ -273,12 +275,15 @@ class BitbucketCloud(SccsApi):
 
     @ats_cache()
     async def get_continuous_deployment_versions_available(
-            self, session: Cloud, repository
+            self, session: Cloud | None, repository
     ) -> list[typing_cd.Available]:
         """
         Get the list of version available to deploy
         """
         logging.info(f"_fetch_continuous_deployment_versions_available on repo : {repository}")
+
+        if session is None:
+            session = self.watcher
 
         self.__log_session(session)
         versions = []
@@ -393,7 +398,7 @@ class BitbucketCloud(SccsApi):
             data={
                 f'/{cd_environment_config["version"]["file"]}': f"{version}\n",
                 "message": f"deploy version {version}",
-                "author": self.get_session_author(session),
+                "author": await self.get_session_author(session),
                 "branch": branch if deploy_branch is None else deploy_branch.name,
             },
             auth=(session.username, session.password),  # type: ignore
@@ -492,6 +497,7 @@ class BitbucketCloud(SccsApi):
         )
         return env
 
+    @ats_cache()
     async def get_continuous_deployment_config_by_branch(
             self, repository: str, repo: Repository, branch_name: str, config: dict
     ) -> tuple[str, typing_cd.EnvironmentConfig]:
@@ -606,8 +612,8 @@ class BitbucketCloud(SccsApi):
             path=f"hooks/{subscription_id}",
         )
 
-    async def delete_repository(self, session: Session, repo_name: str, *args, **kwargs):
-        return await super().delete_repository(session, repo_name, *args, **kwargs)
+    async def delete_repository(self, session: Session, repo_name: str):
+        return await super().delete_repository(session, repo_name)
 
     async def get_session_author(self, session: Cloud) -> str:
         stored_session = await self.get_stored_session(None, session)
