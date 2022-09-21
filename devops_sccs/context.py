@@ -16,6 +16,7 @@
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 from .accesscontrol import Action
+from .plugin import SccsApi
 
 
 class Context:
@@ -29,36 +30,25 @@ class Context:
     UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE = "7f7cd008-3350-47b7-80ce-9472e3a649c1"
     UUID_WATCH_REPOSITORIES = "865eb6e0-ded6-4cae-834b-603a22293086"
 
-    def __init__(self, session_id, session, plugin, client):
+    def __init__(self, session_id, session, plugin: SccsApi, client):
         self.session_id = session_id
         self.session = session
         self.plugin = plugin
         self._client = client
 
-    async def accesscontrol(self, repository, action, args=None):
-        """Access Control
+    async def accesscontrol(self, repository, action):
+        return await self.plugin.accesscontrol(self.session, repository, action)
 
-        see plugin.py for function description
-        """
-        return await self.plugin.accesscontrol(self.session, repository, action, args)
+    async def passthrough(self, request):
+        return await self.plugin.passthrough(self.session, request)
 
-    async def passthrough(self, request, args=None):
-        """Passthough
+    async def get_repositories(self):
+        return await self.plugin.get_repositories(self.session)
 
-        see plugin.py for function description
-        """
-        return await self.plugin.passthrough(self.session, request, args)
-
-    async def get_repositories(self, *args, **kwargs):
-        """Get a list of repositories (with permission for each)
-
-        see plugin.py for function description
-        """
-        return await self.plugin.get_repositories(*args, session=self.session, **kwargs)
+    async def get_repository(self, repository):
+        return await self.plugin.get_repository(self.session, repository)
 
     async def watch_repositories(self, poll_interval=3600, *args, **kwargs):
-        """Watch for get_repositories"""
-
         return self._client.scheduler.watch(
             (Context.UUID_WATCH_REPOSITORIES, self.session_id),
             poll_interval,
@@ -68,23 +58,21 @@ class Context:
             **kwargs,
         )
 
-    async def get_repository(self, repository):
-        """Get a specific repository (with permission)
+    async def get_continuous_deployment_config(
+            self, repository, environments=None
+    ):
+        return await self.plugin.get_continuous_deployment_config(
+            self.session, repository, environments
+        )
 
-        see plugin.py for function description
-        """
-        return await self.plugin.get_repository(self.session, repository)
-
-    async def get_continuous_deployment_config(self, repository, environments=None, args=None):
-        """Get continuous deployment configuration
-
-        see plugin.py for function description
-        """
-        return await self.plugin.get_continuous_deployment_config(self.session, repository, environments, args)
-
-    async def watch_continuous_deployment_config(self, repository, environments=None, args=None, poll_interval=10):
-        """Watch for get_continuous_deployment_config"""
-
+    async def watch_continuous_deployment_config(
+            self,
+            repository,
+            environments=None,
+            poll_interval=10,
+            *args,
+            **kwargs,
+    ):
         await self.accesscontrol(repository, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
 
         def filtering_by_environment(event):
@@ -98,19 +86,18 @@ class Context:
             session=None,  # Shared session
             environments=environments,
             repository=repository,
-            args=args,
+            *args,
+            **kwargs,
         )
 
-    async def get_continuous_deployment_versions_available(self, repository, args=None):
-        """Get continuous deployment versions available
+    async def get_continuous_deployment_versions_available(self, repository, *args, **kwargs):
+        return await self.plugin.get_continuous_deployment_versions_available(
+            self.session, repository, *args, **kwargs
+        )
 
-        see plugin.py for function description
-        """
-        return await self.plugin.get_continuous_deployment_versions_available(self.session, repository, args)
-
-    async def watch_continuous_deployment_versions_available(self, repository, args=None, poll_interval=10):
-        """watch for get_continuous_deployment_versions_available"""
-
+    async def watch_continuous_deployment_versions_available(
+            self, repository, poll_interval=10, *args, **kwargs
+    ):
         await self.accesscontrol(repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
 
         return self._client.scheduler.watch(
@@ -119,31 +106,32 @@ class Context:
             self.plugin.get_continuous_deployment_versions_available,
             session=None,  # Shared session
             repository=repository,
-            args=args,
+            *args,
+            **kwargs,
         )
 
-    async def trigger_continuous_deployment(self, repository, environment, version, args=None):
-        """Trigger a continuous deployment
-
-        see plugin.py for function description
-        """
-        result = await self.plugin.trigger_continuous_deployment(self.session, repository, environment, version, args)
+    async def trigger_continuous_deployment(
+            self, repository, environment, version, *args, **kwargs
+    ):
+        result = await self.plugin.trigger_continuous_deployment(
+            self.session, repository, environment, version, *args, **kwargs
+        )
 
         self._client.scheduler.notify((Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository))
 
         return result
 
-    async def get_continuous_deployment_environments_available(self, repository, args=None):
-        """List all environments that can be used to run the application
+    async def get_continuous_deployment_environments_available(self, repository):
+        return await self.plugin.get_continuous_deployment_environments_available(
+            self.session, repository
+        )
 
-        see plugin.py for function description
-        """
-        return await self.plugin.get_continuous_deployment_environments_available(self.session, repository, args)
-
-    async def watch_continuous_deployment_environments_available(self, repository, args=None, poll_interval=10):
-        """watch for get_continuous_deployment_environments_available"""
-
-        await self.accesscontrol(repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE)
+    async def watch_continuous_deployment_environments_available(
+            self, repository, poll_interval=10, *args, **kwargs
+    ):
+        await self.accesscontrol(
+            repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
+        )
 
         return self._client.scheduler.watch(
             (
@@ -154,34 +142,25 @@ class Context:
             self.plugin.get_continuous_deployment_environments_available,
             session=None,  # Shared session
             repository=repository,
-            args=args,
+            *args,
+            **kwargs,
         )
 
-    async def bridge_repository_to_namespace(self, repository, environment, untrustable=True, args=None):
-        """Bridge repository/environment to a kubernetes namespace
-
-        see plugin.py for function description
-        """
+    async def bridge_repository_to_namespace(self, repository, environment, untrustable=True):
         return await self.plugin.bridge_repository_to_namespace(
-            self.session, repository, environment, untrustable, args
+            self.session, repository, environment, untrustable
         )
 
     def get_add_repository_contract(self):
-        """Get the contract to add a new repository."""
         return self._client.provision.get_add_repository_contract()
 
-    async def add_repository(self, repository, template, template_params, args=None):
-        """Add a new repository
-
-        see plugin.py for function description
-        """
+    async def add_repository(self, repository, template, template_params):
         result = await self.plugin.add_repository(
             self.session,
             self._client.provision,
             repository,
             template,
             template_params,
-            args,
         )
 
         self._client.scheduler.notify((Context.UUID_WATCH_REPOSITORIES, self.session_id))
@@ -189,47 +168,43 @@ class Context:
         return result
 
     async def delete_repository(self, repo_name):
-        """
-        Delete a repository
-        """
         return await self.plugin.delete_repository(self.session, repo_name)
 
-    async def compliance(self, remediation=False, report=False, args=None):
-        """Check if all repositories are compliants
+    async def compliance(self, remediation=False, report=False, *args, **kwargs):
+        return await self.plugin.compliance(self.session, remediation, report, *args, **kwargs)
 
-        see plugin.py for function description
-        """
-        return await self.plugin.compliance(self.session, remediation, report, args)
+    async def compliance_report(self, *args, **kwargs):
+        return await self.plugin.compliance_report(self.session, *args, **kwargs)
 
-    async def compliance_report(self, args=None):
-        """Provides a compliance report about all repositories
+    async def compliance_repository(
+            self, repository, remediation=False, report=False, *args, **kwargs
+    ):
+        return await self.plugin.compliance_repository(
+            self.session, repository, remediation, report, *args, **kwargs
+        )
 
-        see plugin.py for function description
-        """
-        return await self.plugin.compliance_report(self.session, args)
+    async def compliance_report_repository(self, repository, *args, **kwargs):
+        return await self.plugin.compliance_report_repository(
+            self.session, repository, *args, **kwargs
+        )
 
-    async def compliance_repository(self, repository, remediation=False, report=False, args=None):
-        """Check if a repository is compliant
+    async def get_webhook_subscriptions(self, *args, **kwargs):
+        return await self.plugin.get_webhook_subscriptions(self.session, *args, **kwargs)
 
-        see plugin.py for function description
-        """
-        return await self.plugin.compliance_repository(self.session, repository, remediation, report, args)
+    async def get_webhook_subscription_for_repo(self, repo_name, *args, **kwargs):
+        return await self.plugin.get_webhook_subscription_for_repo(
+            self.session, repo_name, *args, **kwargs
+        )
 
-    async def compliance_report_repository(self, repository, args=None):
-        """Provides a compliance report for the repository
+    async def create_webhook_subscription(self, repo_name, *args, **kwargs):
+        return await self.plugin.create_webhook_subscription_for_repo(
+            self.session, repo_name, *args, **kwargs
+        )
 
-        see plugin.py for function description
-        """
-        return await self.plugin.compliance_report_repository(self.session, repository, args)
-
-    async def get_webhook_subscriptions(self, **kwargs):
-        return await self.plugin.get_webhook_subscriptions(self.session, **kwargs)
-
-    async def create_webhook_subscription(self, **kwargs):
-        return await self.plugin.create_webhook_subscription(self.session, **kwargs)
-
-    async def delete_webhook_subscription(self, **kwargs):
-        return await self.plugin.delete_webhook_subscription(self.session, **kwargs)
+    async def delete_webhook_subscription(self, repo_name, subscription_id, *args, **kwargs):
+        return await self.plugin.delete_webhook_subscription(
+            self.session, repo_name, subscription_id, *args, **kwargs
+        )
 
     async def get_projects(self):
         return await self.plugin.get_projects(self.session)

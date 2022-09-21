@@ -40,18 +40,19 @@ import subprocess
 import pygit2
 
 from .errors import AnswerRequired, AnswerValidatorFailure, AuthorSyntax, SccsException
+from .schemas.config import ProvisionConfig
 from .utils.aioify import aioify, cleanupCoreAiofy, getCoreAioify
 
 
 class Provision(object):
     POOL = "provision"
 
-    def __init__(self, checkout_base_path, main, repository, templates, max_workers=10):
-        self.checkout_base_path = checkout_base_path
+    def __init__(self, config: ProvisionConfig, max_workers=10):
+        self.checkout_base_path = config.checkout_base_path
 
-        self.main_contract = main
-        self.repository_contract = repository
-        self.templates = templates
+        self.main_contract = config.main_contract
+        self.repository_contract = config.repository_contract
+        self.templates = config.templates
         self.templates_contract_cache = self.generate_contract_templates()
 
         getCoreAioify().create_thread_pool(self.POOL, max_workers=max_workers)
@@ -70,9 +71,9 @@ class Provision(object):
             ui = {}
 
             # Setup part
-            if template.get("setup") is not None and template["setup"].get("args") is not None:
-                for arg, cfg in template["setup"]["args"].items():
-                    ui[arg] = cfg.copy()
+            if template.setup.args is not None:
+                for arg, cfg in template.setup.args.items():
+                    ui[arg] = cfg.dict()
                     del ui[arg]["arg"]
 
             ui_templates[name] = ui
@@ -106,7 +107,7 @@ class Provision(object):
         if repository_name is None:
             raise AnswerRequired("repository name")
 
-        validator = self.main_contract["repository_validator"]
+        validator = self.main_contract.repository_validator
         g = re.match(validator, repository_name)
         if g is None:
             raise AnswerValidatorFailure("repository name", validator)
@@ -115,7 +116,7 @@ class Provision(object):
         self.validate(self.repository_contract, repository)
 
         # Verify template (required or not and valid)
-        if self.main_contract["template_required"] and (template is None or template == ""):
+        if self.main_contract.template_required and (template is None or template == ""):
             raise AnswerRequired("template")
 
         init_template_cmd = None
@@ -129,7 +130,7 @@ class Provision(object):
 
             # Create custom command
             init_template_cmd = self._create_initialize_template_command(
-                self.templates[template]["setup"], template_params, repository_name
+                self.templates[template].setup, template_params, repository_name
             )
 
         # Create storage definition for this new repository
@@ -326,7 +327,8 @@ class Provision(object):
         Args:
             destination (str): git url of the destination repository
             destination_main_branch (str): the destination main branch
-            additional_branches_mapping (list(str)): Mapping list between template branches and destination branches (eg: [("deploy/dev", "deploy/dev"), ("deploy/dev", "deploy/prod")]
+            additional_branches_mapping (list(str)): Mapping list between template branches and destination branches
+            (eg: [("deploy/dev", "deploy/dev"), ("deploy/dev", "deploy/prod")]
             template (str): Template to use
             initialize_template_command (list(str)): Shell command to initialize the template on the destination
             git_credential (GitCredential): Credential to connect on the template and destination
@@ -350,11 +352,13 @@ class Provision(object):
             return use_me
 
         # Extract information from selected template
-        template_from_url = self.templates[template]["from"]["git"]
-        template_from_main_branch = self.templates[template]["from"]["main_branch"]
-        template_from_other_branches = self.templates[template]["from"].get("other_branches", [])
+        template_from_url = self.templates[template].from_.git
+        template_from_main_branch = self.templates[template].from_.main_branch
+        template_from_other_branches = self.templates[template].from_.other_branches
 
-        checkout_path = os.path.join(self.checkout_base_path, "".join(random.choices(string.ascii_letters, k=32)))
+        checkout_path = os.path.join(
+            self.checkout_base_path, "".join(random.choices(string.ascii_letters, k=32))
+        )
 
         # Git part
         # see: https://github.com/MichaelBoselowitz/pygit2-examples/blob/master/examples.py
@@ -372,7 +376,9 @@ class Provision(object):
         logging.debug(f"{destination}: adding template {template_from_url}")
         remote_template = intermediate.remotes.create("template", template_from_url)
         remote_template.fetch(callbacks=callbacks)
-        tpl_oid = intermediate.lookup_reference(f"refs/remotes/template/{template_from_main_branch}").target
+        tpl_oid = intermediate.lookup_reference(
+            f"refs/remotes/template/{template_from_main_branch}"
+        ).target
 
         # Git create branch based on template and checkout
         logging.debug(f"{destination}: creating main branch '{destination_main_branch}'")
@@ -421,10 +427,14 @@ class Provision(object):
                 logging.warning(f"{destination}: override {destination_main_branch} is not allowed")
                 continue
             if template_branch not in template_from_other_branches:
-                logging.warning(f"{destination}: branch {template_branch} is not available for {template}")
+                logging.warning(
+                    f"{destination}: branch {template_branch} is not available for {template}"
+                )
                 continue
 
-            tpl_oid = intermediate.lookup_reference(f"refs/remotes/template/{template_branch}").target
+            tpl_oid = intermediate.lookup_reference(
+                f"refs/remotes/template/{template_branch}"
+            ).target
             commit = intermediate.get(tpl_oid)
             if not commit:
                 raise SccsException(f"{destination}: commit not found")

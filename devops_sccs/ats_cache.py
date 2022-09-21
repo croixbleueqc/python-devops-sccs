@@ -9,17 +9,14 @@ from typing import Callable
 
 
 class CacheError(Exception):
-    logging.error("CacheError")
     pass
 
 
 class CacheMiss(CacheError, KeyError):
-    logging.debug("Cache miss")
     pass
 
 
 class CacheExpired(CacheError, ValueError):
-    logging.debug("Cache expired")
     pass
 
 

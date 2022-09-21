@@ -44,14 +44,14 @@ def cleanupCoreAiofy(poolName):
 
 
 def aioify(pool=None):
-    def aioify_decorator(func):
-        @wraps(func)
-        async def run(*args, loop=None, pool=pool, **kwargs):
+    def aioify_decorator(method):
+        @wraps(method)
+        async def run(self, *args, loop=None, pool=pool, **kwargs):
             if loop is None:
                 loop = asyncio.get_event_loop()
             executor = None if pool is None else getCoreAioify().get_executor(pool)
 
-            pfunc = partial(func, *args, **kwargs)
+            pfunc = partial(method, self, *args, **kwargs)
             return await loop.run_in_executor(executor, pfunc)
 
         return run
