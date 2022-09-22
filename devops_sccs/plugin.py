@@ -32,11 +32,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
 
+from devops_console.schemas import WebhookEvent
 from .accesscontrol import Action
-from .typing.repositories import Repository
-from .typing.cd import EnvironmentConfig, Available
-from .typing.credentials import Credentials
 from .provision import Provision
+from .typing.cd import Available, EnvironmentConfig
+from .typing.credentials import Credentials
+from .typing.repositories import Repository
 
 Session = object
 
@@ -100,7 +101,7 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def open_session(
-        self, session_id: int, credentials: Credentials | None = None
+            self, session_id: int, credentials: Credentials | None = None
     ) -> StoredSession:
         """
         Open a session
@@ -134,7 +135,7 @@ class SccsApi(ABC):
         raise NotImplementedError()
 
     async def get_stored_session(
-        self, session_id: int | None, session: Session | None = None
+            self, session_id: int | None, session: Session | None = None
     ) -> StoredSession | None:
         raise NotImplementedError()
 
@@ -203,12 +204,12 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def add_repository(
-        self,
-        session: Session,
-        provision: Provision,
-        repo_definition: dict,
-        template: str,
-        template_params: dict,
+            self,
+            session: Session,
+            provision: Provision,
+            repo_definition: dict,
+            template: str,
+            template_params: dict,
     ):
         """Add a new repository
 
@@ -236,7 +237,7 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def get_continuous_deployment_config(
-        self, session: Session, repository, environments
+            self, session: Session, repository, environments
     ) -> list[EnvironmentConfig]:
         """Get continuous deployment configuration
 
@@ -255,7 +256,7 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def get_continuous_deployment_versions_available(
-        self, session, repository
+            self, session, repository
     ) -> list[Available]:
         """Get continuous deployment versions available
 
@@ -275,7 +276,7 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def trigger_continuous_deployment(
-        self, session: Session, repo_name: str, environment: str, version: str
+            self, session: Session, repo_name: str, environment: str, version: str
     ) -> EnvironmentConfig:
         """Trigger a continuous deployment
 
@@ -292,7 +293,7 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def get_continuous_deployment_environments_available(
-        self, session, repository
+            self, session, repository
     ) -> list[EnvironmentConfig]:
         """List all environments that can be used to run the application
 
@@ -307,7 +308,7 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def bridge_repository_to_namespace(
-        self, session, repository, environment, untrustable
+            self, session, repository, environment, untrustable
     ) -> dict:
         """Bridge repository/environment to a kubernetes namespace
 
@@ -413,7 +414,14 @@ class SccsApi(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def create_webhook_subscription_for_repo(self, session, repo_name):
+    async def create_webhook_subscription_for_repo(self,
+                                                   session: Session,
+                                                   repo_name: str,
+                                                   url: str,
+                                                   active: bool,
+                                                   events: list[WebhookEvent],
+                                                   description: str,
+                                                   ):
         raise NotImplementedError()
 
     @abstractmethod

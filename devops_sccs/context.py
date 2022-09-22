@@ -48,12 +48,13 @@ class Context:
     async def get_repository(self, repository):
         return await self.plugin.get_repository(self.session, repository)
 
-    async def watch_repositories(self, poll_interval=3600, *args, **kwargs):
+    async def watch_repositories(self, poll_interval: int, *args, **kwargs):
         return self._client.scheduler.watch(
             (Context.UUID_WATCH_REPOSITORIES, self.session_id),
             poll_interval,
             self.plugin.get_repositories,
             session=self.session,  # NOT shared; we don't need to explicitly call access control.
+            fetch=True,  # Trigger a cache miss
             *args,
             **kwargs,
         )
@@ -67,12 +68,14 @@ class Context:
 
     async def watch_continuous_deployment_config(
             self,
-            repo_name,
-            environments=[],
-            poll_interval=10,
+            repo_name: str,
+            environments: list | None,
+            poll_interval: int,
             *args,
             **kwargs,
     ):
+        if environments is None:
+            environments = []
         await self.accesscontrol(repo_name, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
 
         def filtering_by_environment(event):
@@ -86,6 +89,7 @@ class Context:
             session=None,  # Shared session
             repo_name=repo_name,
             environments=environments,
+            fetch=True,
             *args,
             **kwargs,
         )
@@ -96,16 +100,17 @@ class Context:
         )
 
     async def watch_continuous_deployment_versions_available(
-            self, repository, poll_interval=10, *args, **kwargs
+            self, repo_name: str, poll_interval: int, *args, **kwargs
     ):
-        await self.accesscontrol(repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
+        await self.accesscontrol(repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
 
         return self._client.scheduler.watch(
-            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repository),
+            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repo_name),
             poll_interval,
             self.plugin.get_continuous_deployment_versions_available,
             session=None,  # Shared session
-            repository=repository,
+            repo_name=repo_name,
+            fetch=True,
             *args,
             **kwargs,
         )
@@ -121,34 +126,36 @@ class Context:
 
         return result
 
-    async def get_continuous_deployment_environments_available(self, repository):
+    async def get_continuous_deployment_environments_available(self, repo_name):
         return await self.plugin.get_continuous_deployment_environments_available(
-            self.session, repository
+            self.session, repo_name
         )
 
     async def watch_continuous_deployment_environments_available(
-            self, repository, poll_interval=10, *args, **kwargs
+            self, repo_name, poll_interval: int, *args, **kwargs
     ):
         await self.accesscontrol(
-            repository, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
+            repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
         )
 
         return self._client.scheduler.watch(
             (
                 Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE,
-                repository,
+                repo_name,
             ),
             poll_interval,
             self.plugin.get_continuous_deployment_environments_available,
             session=None,  # Shared session
-            repository=repository,
+            repo_name=repo_name,
+            fetch=True,
             *args,
             **kwargs,
         )
 
-    async def bridge_repository_to_namespace(self, repository, environment, untrustable=True):
+    async def bridge_repository_to_namespace(self, repo_name: str, environment: str,
+                                             untrustable=True):
         return await self.plugin.bridge_repository_to_namespace(
-            self.session, repository, environment, untrustable
+            self.session, repo_name, environment, untrustable
         )
 
     def get_add_repository_contract(self):
