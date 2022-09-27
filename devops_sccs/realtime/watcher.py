@@ -159,7 +159,6 @@ class Watcher(object):
                     elif cache_value != value:
                         _type = EventType.MODIFIED
                     else:
-                        # logging.info("identical !")
                         continue
 
                     event = Event(key=value.key, _type=_type, value=value)
