@@ -188,7 +188,9 @@ class BitbucketCloud(SccsApi):
     async def passthrough(self, session: Cloud, request):
         return await super().passthrough(session, request)
 
-    @ats_cache()
+    @ats_cache(
+        miss_callback=lambda f: logging.debug(f"{f}: fetching..."),
+    )
     async def get_repositories(
         self,
         session: Cloud,
@@ -232,7 +234,10 @@ class BitbucketCloud(SccsApi):
             session, provision, repo_definition, template, template_params
         )
 
-    @ats_cache()
+    @ats_cache(
+        ttl=60.0,
+        miss_callback=lambda f: logging.info(f"{f}: fetching..."),
+    )
     async def get_continuous_deployment_config(
         self,
         session: Cloud | None,
@@ -277,7 +282,9 @@ class BitbucketCloud(SccsApi):
         logging.debug(results)
         return results
 
-    @ats_cache()
+    @ats_cache(
+        miss_callback=lambda f: logging.info(f"{f}: fetching..."),
+    )
     async def get_continuous_deployment_versions_available(
         self, session: Cloud | None, repo_name: str
     ) -> list[typing_cd.Available]:
@@ -435,7 +442,9 @@ class BitbucketCloud(SccsApi):
 
         return continuous_deployment
 
-    @ats_cache()
+    @ats_cache(
+        miss_callback=lambda f: logging.info(f"{f}: fetching..."),
+    )
     async def get_continuous_deployment_environments_available(
         self, session: Cloud | None, repo_name
     ) -> list[typing_cd.EnvironmentConfig]:

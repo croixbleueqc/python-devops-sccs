@@ -129,7 +129,7 @@ class Watcher(object):
                     if not isinstance(value, WatcherType):
                         logging.error("watcher: value is invalid")
                         value = WatcherType(
-                            key=hash(repr(value)),
+                            key=hash(str(value)),
                             data=value.dict() if hasattr(value, "dict") else value,
                         )
 
