@@ -29,28 +29,34 @@ IMPORTANT: If you consider that some features are enough generic and can help ot
 
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any
 
+from devops_console.schemas import WebhookEvent
+from .accesscontrol import Action
+from .provision import Provision
+from .typing.cd import Available, EnvironmentConfig
+from .typing.credentials import Credentials
+from .typing.repositories import Repository
 
-# def init_plugin():
-#     """
-#     Entrypoint to register a plugin.
-
-#     id has to be unique. You can't register 2 plugins with the same id
-
-#     Returns:
-#         str,object: unique id, plugin instance
-#     """
-#     return "sccs", SccsPlugin.__call__()
+Session = object
 
 
-class SccsPlugin(ABC):
+@dataclass
+class StoredSession:
+    id: int
+    shared_sessions: int
+    session: Session
+    credentials: Credentials
+
+
+class SccsApi(ABC):
     """
     Abstract class to create a plugin
     """
 
     @abstractmethod
-    async def init(self, core, config: dict[str, Any]):
+    async def init(self, core, config: dict):
         """
         Initialize the plugin
 
@@ -65,7 +71,7 @@ class SccsPlugin(ABC):
 
         Args:
             core(Core)    : Core library
-            args(dict)    : static configuration for the plugin
+            config(dict)    : static configuration for the plugin
         """
         raise NotImplementedError()
 
@@ -77,7 +83,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def get_session_id(self, session):
+    def get_session_id(self, credentials: Credentials | None) -> int:
         """
         Permit to generate the same session id for the same significant arguments.
 
@@ -94,7 +100,9 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def open_session(self, session_id, args):
+    async def open_session(
+            self, session_id: int, credentials: Credentials | None = None
+    ) -> StoredSession:
         """
         Open a session
 
@@ -121,26 +129,22 @@ class SccsPlugin(ABC):
         - return None: we don't need anything as we will rely only on the root user / connection created in init()
           stage (for auditability and security you should not do that)
 
-        Args:
-            args(dict): extra arguments required to open a session
-
         Returns:
             object|None: a session object
         """
         raise NotImplementedError()
 
-    @abstractmethod
-    async def close_session(self, session_id, session, args):
-        """Close a session
-
-        Args:
-            session(object): the session
-            args(dict): extr arguments to handle the operation
-        """
+    async def get_stored_session(
+            self, session_id: int | None, session: Session | None = None
+    ) -> StoredSession | None:
         raise NotImplementedError()
 
     @abstractmethod
-    async def accesscontrol(self, session, repository, action, args):
+    async def close_session(self, session_id: int):
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def accesscontrol(self, session: Session, repo_name: str, action: Action):
         """Access Control
 
         Control if the action can be done for this repository on this session
@@ -149,7 +153,6 @@ class SccsPlugin(ABC):
             session(object): the session
             repository(dict): Answers to a repository contract
             action(admission.Actions): Action requested
-            args(dict): extr arguments to handle the operation
 
         Exceptions:
             AccessForbidden: Access forbidden
@@ -157,7 +160,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def passthrough(self, session, request, args):
+    async def passthrough(self, session: Session, request: str) -> Any:
         """Passthrough
 
         Permit to support non standard operations. That can be see like a way to add proprietary APIs.
@@ -165,7 +168,6 @@ class SccsPlugin(ABC):
         Args:
             session(object): the session
             request(str): the non standard request to perform
-            args(dict): extr arguments to handle the request
 
         Returns:
             object: non standard answer
@@ -173,14 +175,13 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_repositories(self, session, args):
+    async def get_repositories(self, session: Session) -> list[Repository]:
         """Get a list of repositories (with permission for each)
 
         This list can be restricted to what is visible only based on requester's permissions.
 
         Args:
             session(object): the session
-            args(dict): extr arguments to handle the operation
 
         Returns:
             list(typing.repositories.Repository): List of repository
@@ -188,13 +189,12 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_repository(self, session, repository, *args, **kwargs):
+    async def get_repository(self, session: Session, repo_name: str) -> Repository:
         """Get a specific repository (with permission)
 
         Args:
             session(object): the session
             repository(str): the repository name
-            args(dict): extr arguments to handle the operation
 
         Returns:
             typing.repositories.Repository: a repository
@@ -203,7 +203,14 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def add_repository(self, session, provision, repository, template, template_params, args):
+    async def add_repository(
+            self,
+            session: Session,
+            provision: Provision,
+            repo_definition: dict,
+            template: str,
+            template_params: dict,
+    ):
         """Add a new repository
 
         The main workflow is:
@@ -221,12 +228,17 @@ class SccsPlugin(ABC):
             repository(dict): Answers to a repository contract
             template(str): Template to use
             template_params(dict): Answers to a template contract
-            args(dict): extr arguments to handle the operation
         """
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_continuous_deployment_config(self, session, repository, environments, args):
+    async def delete_repository(self, session: Session, repo_name: str):
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def get_continuous_deployment_config(
+            self, session: Session, repository, environments
+    ) -> list[EnvironmentConfig]:
         """Get continuous deployment configuration
 
         This is not the real state of the deployment in your "production" environment but the state expected
@@ -236,7 +248,6 @@ class SccsPlugin(ABC):
             session(object): the session
             repository(str): the repository name
             environments(list(str)): filter to those environments only (None for all)
-            args(dict): extr arguments to handle the operation
 
         Returns:
             list(typing.cd.EnvironmentConfig): Configuration for filtered environments
@@ -244,7 +255,9 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_continuous_deployment_versions_available(self, session, repository, args=None):
+    async def get_continuous_deployment_versions_available(
+            self, session, repository
+    ) -> list[Available]:
         """Get continuous deployment versions available
 
         @abstractmethod
@@ -255,7 +268,6 @@ class SccsPlugin(ABC):
             Args:
                 session(object): the session
                 repository(str): the repository name
-                args(dict): extr arguments to handle the operation
 
             Returns:
                 list(typing.cd.Available): Versions available
@@ -263,7 +275,9 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def trigger_continuous_deployment(self, session, repository, environment, version, args):
+    async def trigger_continuous_deployment(
+            self, session: Session, repo_name: str, environment: str, version: str
+    ) -> EnvironmentConfig:
         """Trigger a continuous deployment
 
         Args:
@@ -271,7 +285,6 @@ class SccsPlugin(ABC):
             repository(str): the repository name
             environment(str): the environment (eg: production, development, qa, ...)
             version(str): version to deploy
-            args(dict): extr arguments to handle the operation
 
         Returns:
             typing.cd.EnvironmentConfig: new configuration for the environment
@@ -279,13 +292,14 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_continuous_deployment_environments_available(self, session, repository, args):
+    async def get_continuous_deployment_environments_available(
+            self, session, repository
+    ) -> list[EnvironmentConfig]:
         """List all environments that can be used to run the application
 
         Args:
             session(object): the session
             repository(str): the repository name
-            args(dict): extr arguments to handle the operation
 
         Returns:
             list(typing.cd.EnvironmentConfig): list of environments
@@ -293,7 +307,9 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def bridge_repository_to_namespace(self, session, repository, environment, untrustable, args):
+    async def bridge_repository_to_namespace(
+            self, session, repository, environment, untrustable
+    ) -> dict:
         """Bridge repository/environment to a kubernetes namespace
 
         EXPERIMENTAL FEATURE
@@ -320,7 +336,6 @@ class SccsPlugin(ABC):
             environment(str): the environment (eg: production, development, qa, ...)
             unstrustable(bool): used to enforce controls on the plugin to distinguish a critical request from the
             kubernetes backend
-            args(dict): extr arguments to handle the operation
 
         Returns:
             dict: a bridge object
@@ -328,7 +343,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def compliance(self, session, remediation, report, args):
+    async def compliance(self, session: Session, remediation: bool, report: bool) -> dict | None:
         """Check if all repositories are compliants
 
         No remediation should be done by default if a repository is not compliant.
@@ -341,7 +356,6 @@ class SccsPlugin(ABC):
             session(object): the session
             remediation(bool): force a remediation
             report(bool): send a report (avoid to call compliance_report)
-            args(dict): extr arguments to handle the operation
 
         Returns:
             dict|None: an optional report
@@ -349,7 +363,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def compliance_report(self, session, args):
+    async def compliance_report(self, session) -> dict:
         """Provides a compliance report about all repositories
 
         Returns:
@@ -358,7 +372,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def compliance_repository(self, session, repository, remediation, report, args):
+    async def compliance_repository(self, session, repository, remediation, report) -> dict | None:
         """Check if a repository is compliant
 
         No remediation should be done by default if a repository is not compliant.
@@ -372,7 +386,6 @@ class SccsPlugin(ABC):
             repository(str): the repository name
             remediation(bool): force a remediation
             report(bool): send a report (avoid to call compliance_report_repository)
-            args(dict): extr arguments to handle the operation
 
         Returns:
             dict|None: an optional report
@@ -380,7 +393,7 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def compliance_report_repository(self, session, repository, args):
+    async def compliance_report_repository(self, session, repo_name: str) -> dict:
         """Provides a compliance report for the repository
 
         Returns:
@@ -389,22 +402,28 @@ class SccsPlugin(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_hooks_repository(self, session, repository, args):
-        """Check if a repository is compliant
+    async def get_projects(self, session):
+        raise NotImplementedError()
 
-        No remediation should be done by default if a repository is not compliant.
-        A remediation can failed if manual intervention is required.
-        An optional report can be send back to the requester
+    @abstractmethod
+    async def get_webhook_subscriptions(self, session):
+        raise NotImplementedError()
 
-        The report should be cached/stored to be provided in an efficient way with compliance_report_repository
+    @abstractmethod
+    async def get_webhook_subscription_for_repo(self, session, repo_name):
+        raise NotImplementedError()
 
-        Args:
-            session(object): the session
-            repository(str): the repository name
-            remediation(bool): force a remediation
-            report(bool): send a report (avoid to call compliance_report_repository)
-            args(dict): extr arguments to handle the operation
+    @abstractmethod
+    async def create_webhook_subscription_for_repo(self,
+                                                   session: Session,
+                                                   repo_name: str,
+                                                   url: str,
+                                                   active: bool,
+                                                   events: list[WebhookEvent],
+                                                   description: str,
+                                                   ):
+        raise NotImplementedError()
 
-        Returns:
-            dict|None: an optional report
-        """
+    @abstractmethod
+    async def delete_webhook_subscription(self, session, repo_name, subscription_id):
+        raise NotImplementedError()

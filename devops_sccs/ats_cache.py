@@ -9,17 +9,14 @@ from typing import Callable
 
 
 class CacheError(Exception):
-    logging.error("CacheError")
     pass
 
 
 class CacheMiss(CacheError, KeyError):
-    logging.debug("Cache miss")
     pass
 
 
 class CacheExpired(CacheError, ValueError):
-    logging.debug("Cache expired")
     pass
 
 
@@ -85,7 +82,7 @@ def ats_cache(
     pq: deque[str | int] = deque(maxlen=maxsize)
 
     def wrapper(func):
-        async def async_cache(_self, *args, fetch: bool = False, **kwargs):
+        async def async_cache(_self, *args, fetch: bool, **kwargs):
             nonlocal cache, hits, misses
 
             key = makekey(args, kwargs)
@@ -104,9 +101,8 @@ def ats_cache(
                     pq.appendleft(key)
 
             except CacheMiss:
+                miss_callback(func.__name__)
                 result = await func(_self(), *args, **kwargs)
-
-                result = miss_callback(result)
 
                 node = CacheItem(expiry=now() + ttl, value=result)
 
@@ -129,7 +125,9 @@ def ats_cache(
                     pq.appendleft(key)
                     misses += 1
 
-            logging.debug(f"Cache hits: {hits}, misses: {misses}")
+            logging.debug(
+                f"\nCache wrap for {func.__name__}\n\twith args: {args}\n\tand kwargs: {kwargs}\n\n\tCache hits: {hits}, misses: {misses}"
+            )
             return cache[key].value
 
         def cache_info():
@@ -146,8 +144,8 @@ def ats_cache(
                 hits = misses = 0
 
         @wraps(func)
-        async def inner(self, *args, **kwargs):
-            return await async_cache(weakref.ref(self), *args, **kwargs)
+        async def inner(self, *args, fetch: bool = False, **kwargs):
+            return await async_cache(weakref.ref(self), *args, fetch=fetch, **kwargs)
 
         inner.cache_info = cache_info
         inner.cache_clear = cache_clear

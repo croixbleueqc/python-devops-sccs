@@ -16,8 +16,10 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
+from contextlib import asynccontextmanager
 import glob
 import importlib.util
+import logging
 import os
 import sys
 
@@ -26,9 +28,14 @@ from .errors import PluginAlreadyRegistered, PluginNotRegistered
 
 # Built-in plugins
 from .provision import Provision
+from .plugin import SccsApi
 from .realtime.scheduler import Scheduler
+from .typing.credentials import Credentials
+from .schemas.config import Plugins, SccsConfig
 
-plugins = {}
+
+# runtime plugins stare
+plugins: dict[str, SccsApi] = {}
 
 
 def register_plugin(name, plugin):
@@ -38,65 +45,60 @@ def register_plugin(name, plugin):
 
 
 class SccsClient(object):
-
     """
     Manages source code control systems
     Manages a standard workflow to use a specific source code control system
     """
 
-    class ControlledContext:
-        """Create/Delete context in a with statement"""
-
-        def __init__(self, client, plugin_id, session):
-            self.client = client
-            self.plugin_id = plugin_id
-            self.session = session
-
-        async def __aenter__(self):
-            self.ctx = await self.client.create_context(self.plugin_id, self.session)
-            return self.ctx
-
-        async def __aexit__(self, exc_type, exc, tb):
-            await self.client.delete_context(self.ctx)
-
     def __init__(self):
         """Initialize plugins and internal modules"""
-
         self.scheduler = Scheduler()
         self.provision: Provision
 
     @classmethod
-    async def create(cls, config=None):
-        if config is None:
-            config = {}
+    async def create(cls, config: SccsConfig):
         self = SccsClient()
-        if config.get("provision") is not None:
-            self.provision = Provision(
-                config["provision"].get("checkout_base_path", "/tmp"),
-                main=config["provision"]["main"],
-                repository=config["provision"].get("repository", {}),
-                templates=config["provision"].get("templates", {}),
-            )
+        if config.provision is not None:
+            self.provision = Provision(config=config.provision)
 
-        plugins_config = config.get("plugins", {})
+        plugins_config = config.plugins
         await self.load_builtin_plugins(plugins_config)
 
         await self.load_external_plugins(plugins_config)
 
         return self
 
+    @asynccontextmanager
+    async def context(self, plugin_id: str, credentials: Credentials | dict[str, str] | None):
+        global plugins
+
+        plugin = plugins.get(plugin_id)
+        if plugin is None:
+            raise PluginNotRegistered(plugin_id)
+
+        if isinstance(credentials, dict):
+            credentials = Credentials(**credentials)
+
+        session_id = plugin.get_session_id(credentials)
+
+        s = await plugin.open_session(session_id, credentials)
+
+        ctx = Context(session_id, s.session, plugin, self)
+
+        try:
+            yield ctx
+        finally:
+            await plugin.close_session(session_id)
+
     async def cleanup(self):
         if self.provision is not None:
             self.provision.cleanup()
 
-        # if self.enableHook:
-        #     self.hookServer.stop_server()
-        #
         global plugins
         for plugin_id in list(plugins.keys()):
             await self.unregister(plugin_id)
 
-    async def load_builtin_plugins(self, plugins_config):
+    async def load_builtin_plugins(self, plugins_config: Plugins):
         """Built-in plugins
 
         A config can be passed to skip/or config some built-in plugins.
@@ -107,14 +109,14 @@ class SccsClient(object):
         # config = plugins_config.get("config", {})
         # todo?
 
-    async def load_external_plugins(self, plugins_config):
+    async def load_external_plugins(self, plugins_config: Plugins):
         """External plugins
 
         All files with .py extension will be loaded
         """
 
-        external_path = plugins_config.get("external")
-        config = plugins_config.get("config", {})
+        external_path = plugins_config.external
+        config = plugins_config.config
 
         if os.path.isdir(external_path):
             sys.path.append(external_path)
@@ -148,32 +150,7 @@ class SccsClient(object):
 
     async def unregister(self, plugin_id):
         global plugins
-        plugin = plugins.pop(plugin_id)
-        await plugin.cleanup()
-
-    async def create_context(self, plugin_id, session):
-        """Create a context
-
-        A session and the real plugin will be embedded in a context.
-
-        This is the main entry point to communicate with the sccs
-        """
-        global plugins
-        plugin = plugins.get(plugin_id)
-        if plugin is None:
-            raise PluginNotRegistered(plugin_id)
-
-        session_id = plugin.get_session_id(session)
-
-        s = await plugin.open_session(session_id, session)
-
-        return Context(session_id, s, plugin, self)
-
-    async def delete_context(self, context, args=None):
-        """Delete a context by closing a session"""
-
-        await context.plugin.close_session(context.session_id, context.session, args)
-
-    def context(self, plugin_id, session):
-        """Controlled context to use in a with statement"""
-        return SccsClient.ControlledContext(self, plugin_id, session)
+        try:
+            await plugins.pop(plugin_id).cleanup()
+        except KeyError:
+            logging.warning(f"Plugin {plugin_id} not registered")
