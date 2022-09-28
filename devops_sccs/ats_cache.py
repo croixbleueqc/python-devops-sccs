@@ -82,7 +82,7 @@ def ats_cache(
     pq: deque[str | int] = deque(maxlen=maxsize)
 
     def wrapper(func):
-        async def async_cache(_self, *args, fetch: bool = False, **kwargs):
+        async def async_cache(_self, *args, fetch: bool, **kwargs):
             nonlocal cache, hits, misses
 
             key = makekey(args, kwargs)
@@ -144,8 +144,8 @@ def ats_cache(
                 hits = misses = 0
 
         @wraps(func)
-        async def inner(self, *args, **kwargs):
-            return await async_cache(weakref.ref(self), *args, **kwargs)
+        async def inner(self, *args, fetch: bool = False, **kwargs):
+            return await async_cache(weakref.ref(self), *args, fetch=fetch, **kwargs)
 
         inner.cache_info = cache_info
         inner.cache_clear = cache_clear
