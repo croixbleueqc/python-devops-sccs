@@ -327,9 +327,6 @@ class BitbucketCloud(SccsApi):
         """
         Trigger a deployment in a specific environment
         """
-        repo = await self.get_repository(session, repo_name)
-        if repo is None:
-            raise TriggerCdEnvUnsupported(repo_name, environment)
 
         # Get Continuous Deployment configuration for the environment requested
         cd_environment_config: dict[str, Any] = {}
@@ -340,22 +337,19 @@ class BitbucketCloud(SccsApi):
         if len(cd_environment_config) == 0:
             utils_cd.trigger_not_supported(repo_name, environment)
 
-        continuous_deployment = None
         # using user session for repo manipulations
         # Check current configuration using the cache. This is ok because the user will see the
         # deployed version anyway
-        list_continuous_deployment = await self.get_continuous_deployment_config(
-            session=self.watcher,
-            repo_name=repo_name,
-            environments=[environment],
-        )
-
-        for config in list_continuous_deployment:
-            if config.environment == environment:
-                continuous_deployment = config
-                break
-
-        if continuous_deployment is None:
+        continuous_deployment: typing_cd.EnvironmentConfig
+        try:
+            continuous_deployment = (
+                await self.get_continuous_deployment_config(
+                    session=self.watcher,
+                    repo_name=repo_name,
+                    environments=[environment],
+                )
+            )[0]
+        except IndexError:
             logging.info(
                 f"Continuous deployment config not found for {repo_name} on environment {environment}"
             )
@@ -370,14 +364,13 @@ class BitbucketCloud(SccsApi):
         )
 
         utils_cd.trigger_prepare(
-            continuous_deployment,
-            versions_available,
-            repo_name,
-            environment,
-            version,
+            continuous_deployment, versions_available, repo_name, environment, version
         )
 
-        # Check if we need/can do a PR
+        repo = await self.get_repository(session, repo_name)
+        if repo is None:
+            raise TriggerCdEnvUnsupported(repo_name, environment)
+
         branch = cd_environment_config["branch"]
 
         if cd_environment_config.get("trigger", {}).get("pullrequest", False):
@@ -386,7 +379,7 @@ class BitbucketCloud(SccsApi):
             for pullrequest in repo.pullrequests.each():
                 if (
                     pullrequest.destination_branch == branch
-                    and pullrequest.title
+                    and pullrequest.title is not None
                     and self.cd_pullrequest_tag in pullrequest.title
                 ):
                     link = pullrequest.get_link("html")
@@ -519,7 +512,6 @@ class BitbucketCloud(SccsApi):
         )
         return env
 
-    @ats_cache()
     async def get_continuous_deployment_config_by_branch(
         self, repository: str, repo: Repository, branch_name: str, config: dict
     ) -> tuple[str, typing_cd.EnvironmentConfig]:
@@ -569,7 +561,7 @@ class BitbucketCloud(SccsApi):
 
         return (
             branch_name,
-            self.create_continuous_deployment_config_by_branch(
+            BitbucketCloud.create_continuous_deployment_config_by_branch(
                 repository, version, branch_name, config, pullrequest_link
             ),
         )

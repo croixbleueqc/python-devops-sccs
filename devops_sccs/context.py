@@ -117,7 +117,7 @@ class Context:
 
         self._client.scheduler.notify((Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository))
 
-        return result
+        return result.dict()
 
     async def get_continuous_deployment_environments_available(self, repo_name):
         return await self.plugin.get_continuous_deployment_environments_available(
