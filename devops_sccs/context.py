@@ -176,13 +176,11 @@ class Context:
     async def compliance_report(self):
         return await self.plugin.compliance_report(self.session)
 
-    async def compliance_repository(self, repository, remediation=False, report=False):
-        return await self.plugin.compliance_repository(
-            self.session, repository, remediation, report
-        )
+    async def compliance_repository(self, repo_name, remediation=False, report=False):
+        return await self.plugin.compliance_repository(self.session, repo_name, remediation, report)
 
-    async def compliance_report_repository(self, repository):
-        return await self.plugin.compliance_report_repository(self.session, repository)
+    async def compliance_report_repository(self, repo_name):
+        return await self.plugin.compliance_report_repository(self.session, repo_name)
 
     async def get_webhook_subscriptions(self):
         return await self.plugin.get_webhook_subscriptions(self.session)
