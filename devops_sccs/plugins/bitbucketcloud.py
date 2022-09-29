@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any, TypeAlias
+from typing import Any
 from urllib.error import HTTPError
 
 import requests
@@ -37,20 +37,17 @@ from ..utils import cd as utils_cd
 
 PLUGIN_NAME = "bitbucketcloud"
 
-Session: TypeAlias = Cloud | dict[str, Any]
-
 
 class BitbucketCloud(SccsApi):
-    def __init__(self):
-        self.accesscontrol_rules = None
-        self.cd_branches_accepted = None
-        self.cd_environments = None
-        self.cd_pullrequest_tag = None
-        self.cd_versions_available = None
-        self.local_sessions = None
-        self.team = None
-        self.watcher = None
-        self.watcher_user = None
+    accesscontrol_rules: dict[int, list[str]]
+    cd_branches_accepted: list[str]
+    cd_environments: list[dict[str, Any]]
+    cd_pullrequest_tag: str
+    cd_versions_available: list[str]
+    local_sessions: dict[int, StoredSession]
+    team: str
+    watcher: Cloud
+    watcher_user: Credentials
 
     async def init(self, core: SccsClient, config: dict):
         """
@@ -58,19 +55,17 @@ class BitbucketCloud(SccsApi):
         """
         logging.info("Initializing BitbucketCloud plugin...")
 
-        self.local_sessions: dict[int, StoredSession] = {}
+        self.local_sessions = {}
 
         self.team = config["team"]
 
-        self.cd_environments: list[dict[str, Any]] = config["continuous_deployment"]["environments"]
-        self.cd_branches_accepted: list[str] = [env["branch"] for env in self.cd_environments]
-        self.cd_pullrequest_tag: str = config["continuous_deployment"]["pullrequest"]["tag"]
-        self.cd_versions_available: list[str] = config["continuous_deployment"]["pipeline"][
+        self.cd_environments = config["continuous_deployment"]["environments"]
+        self.cd_branches_accepted = [env["branch"] for env in self.cd_environments]
+        self.cd_pullrequest_tag = config["continuous_deployment"]["pullrequest"]["tag"]
+        self.cd_versions_available = config["continuous_deployment"]["pipeline"][
             "versions_available"
         ]
 
-        self.watcher_user: Credentials
-        self.watcher: Cloud
         try:
             self.watcher_user = Credentials(
                 user=config["watcher"]["user"],
@@ -86,7 +81,7 @@ class BitbucketCloud(SccsApi):
             logging.error("Watcher credentials are missing from the configuration file.")
             raise
 
-        self.accesscontrol_rules: dict[int, list[str]] = {
+        self.accesscontrol_rules = {
             Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG: Permission.READ_CAPABILITIES,
             Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE: Permission.READ_CAPABILITIES,
             Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE: Permission.READ_CAPABILITIES,
@@ -160,22 +155,19 @@ class BitbucketCloud(SccsApi):
         return self.local_sessions.get(session_id)
 
     @staticmethod
-    def __log_session(session: Session | None):
+    def __log_session(session: Cloud | None):
         """
         helper function for keeping track of who calls what.
         """
         funcName = inspect.getouterframes(inspect.currentframe(), 2)[1][3]
-        username = "Watcher"
-
-        if isinstance(session, dict):  # by default  None is the watcher
-            username = session["user"]["user"]
+        username = session.username if session is not None else "Watcher"
 
         logging.debug(f"{username} called {funcName}")
 
     def __new__(cls):
         return super().__new__(cls)
 
-    async def accesscontrol(self, session: Cloud, repo_name: str, action):
+    async def accesscontrol(self, session: Cloud, repo_name: str, action: int):
         """see plugin.py"""
         logging.debug(f"Assessing access rights for {repo_name}")
 
@@ -200,6 +192,7 @@ class BitbucketCloud(SccsApi):
         result: list[typing_repo.Repository] = []
 
         for repo in session._get_paged("user/permissions/repositories", params={"pagelen": 100}):
+            assert isinstance(repo, dict)
             result.append(
                 typing_repo.Repository(
                     key=hash(repo["repository"]["name"]),
@@ -551,10 +544,9 @@ class BitbucketCloud(SccsApi):
         if config.get("trigger", {}).get("pullrequest", False):
             # Continuous Deployment is done with a PR.
             for pullrequest in repo.pullrequests.each():
-                if (
-                    pullrequest.destination_branch == config["branch"]
-                    and self.cd_pullrequest_tag in pullrequest.title
-                ):
+                if pullrequest.destination_branch == config[
+                    "branch"
+                ] and self.cd_pullrequest_tag in (pullrequest.title or ""):
                     link = pullrequest.get_link("html")
                     pullrequest_link = link["href"] if type(link) is dict else link
                     break
@@ -570,10 +562,11 @@ class BitbucketCloud(SccsApi):
     async def get_repository_permission(self, session: Cloud, repo_name: str) -> str | None:
         # get repository permissions for user
         try:
-            res: dict = session.get(
+            res = session.get(
                 "user/permissions/repositories",
                 params={"repository.name": repo_name},
             )
+            assert isinstance(res, dict)
             values = res.get("values", None) if res is not None else None
             if values is not None and len(values) > 0:
                 return values[0]["permission"]
@@ -631,7 +624,7 @@ class BitbucketCloud(SccsApi):
             path=f"hooks/{subscription_id}",
         )
 
-    async def delete_repository(self, session: Session, repo_name: str):
+    async def delete_repository(self, session: Cloud, repo_name: str):
         return await super().delete_repository(session, repo_name)
 
     async def get_session_author(self, session: Cloud) -> str:

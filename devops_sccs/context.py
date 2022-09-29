@@ -20,9 +20,9 @@ from .plugin import SccsApi
 
 
 class Context:
-    """
-    Context permits to communicate with a source code control system for a specific session.
-    A session is an abstract concept that can hold nothing or any object type understandable by the plugin which issued it.
+    """Context permits to communicate with a source code control system for a specific session.
+    A session is an abstract concept that can hold nothing or any object type understandable
+    by the plugin which issued it.
     """
 
     UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG = "a7d7cba8-1a49-426c-9811-29022aca1a5a"
