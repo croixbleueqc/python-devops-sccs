@@ -61,7 +61,7 @@ class Provision(object):
         cleanupCoreAiofy(self.POOL)
 
     def create_git_credential(self, user, pub, key, author):
-        return GitCredential(user, pub, key, author)
+        return GitCredentials(user, pub, key, author)
 
     def generate_contract_templates(self):
         """Generate the contract part from a template (template.setup.args)"""
@@ -400,11 +400,11 @@ class Provision(object):
             # Create commit
             logging.debug(f"{destination}: creating commit")
 
-            committer_signature = GitCredential.create_pygit2_signature(git_credential.author)
+            committer_signature = GitCredentials.create_pygit2_signature(git_credential.author)
             if author is None:
                 author_signature = committer_signature
             else:
-                author_signature = GitCredential.create_pygit2_signature(author)
+                author_signature = GitCredentials.create_pygit2_signature(author)
 
             intermediate.index.add_all()
             intermediate.index.write()
@@ -469,7 +469,7 @@ class Provision(object):
         return use_me
 
 
-class GitCredential(object):
+class GitCredentials(object):
     """Credential for git
 
     Only support SSH key for now

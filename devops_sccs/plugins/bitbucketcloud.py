@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import inspect
 import logging
-from typing import Any
 from urllib.error import HTTPError
 
 import requests
@@ -25,6 +24,7 @@ from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.errors import ApiNotFoundError, ApiPermissionError
 
 from devops_console.schemas import WebhookEvent
+from devops_sccs.schemas.config import Environment, PluginConfig
 from ..accesscontrol import Action, Permission
 from ..ats_cache import ats_cache
 from ..client import register_plugin, SccsClient
@@ -39,38 +39,26 @@ PLUGIN_NAME = "bitbucketcloud"
 
 
 class BitbucketCloud(SccsApi):
-    accesscontrol_rules: dict[int, list[str]]
-    cd_branches_accepted: list[str]
-    cd_environments: list[dict[str, Any]]
-    cd_pullrequest_tag: str
-    cd_versions_available: list[str]
-    local_sessions: dict[int, StoredSession]
-    team: str
-    watcher: Cloud
-    watcher_user: Credentials
-
-    async def init(self, core: SccsClient, config: dict):
+    async def init(self, core: SccsClient, config: PluginConfig):
         """
         Initialize the plugin
         """
         logging.info("Initializing BitbucketCloud plugin...")
 
-        self.local_sessions = {}
+        self.local_sessions: dict[int, StoredSession] = {}
 
-        self.team = config["team"]
+        self.team = config.team
 
-        self.cd_environments = config["continuous_deployment"]["environments"]
-        self.cd_branches_accepted = [env["branch"] for env in self.cd_environments]
-        self.cd_pullrequest_tag = config["continuous_deployment"]["pullrequest"]["tag"]
-        self.cd_versions_available = config["continuous_deployment"]["pipeline"][
-            "versions_available"
-        ]
+        self.cd_environments = config.continuous_deployment.environments
+        self.cd_branches_accepted = [env.branch for env in self.cd_environments]
+        self.cd_pullrequest_tag = config.continuous_deployment.pullrequest.tag
+        self.cd_versions_available = config.continuous_deployment.pipeline.versions_available
 
         try:
             self.watcher_user = Credentials(
-                user=config["watcher"]["user"],
+                user=config.watcher.user,
                 author="Admin User",
-                apikey=config["watcher"]["pwd"],
+                apikey=config.watcher.pwd,
             )
             self.watcher = Cloud(
                 username=self.watcher_user.user,
@@ -256,7 +244,7 @@ class BitbucketCloud(SccsApi):
         for branch in repo.branches.each():
             try:
                 index = self.cd_branches_accepted.index(branch.name)
-                if len(environments) == 0 or self.cd_environments[index]["name"] in environments:
+                if len(environments) == 0 or self.cd_environments[index].name in environments:
                     deploys.append((branch.name, index))
             except (KeyError, ValueError):
                 pass
@@ -322,12 +310,12 @@ class BitbucketCloud(SccsApi):
         """
 
         # Get Continuous Deployment configuration for the environment requested
-        cd_environment_config: dict[str, Any] = {}
+        cd_environment_config: Environment
         for cd_environment in self.cd_environments:
-            if cd_environment["name"] == environment:
+            if cd_environment.name == environment:
                 cd_environment_config = cd_environment
                 break
-        if len(cd_environment_config) == 0:
+        else:
             utils_cd.trigger_not_supported(repo_name, environment)
 
         # using user session for repo manipulations
@@ -364,9 +352,9 @@ class BitbucketCloud(SccsApi):
         if repo is None:
             raise TriggerCdEnvUnsupported(repo_name, environment)
 
-        branch = cd_environment_config["branch"]
+        branch = cd_environment_config.branch
 
-        if cd_environment_config.get("trigger", {}).get("pullrequest", False):
+        if cd_environment_config.trigger.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
             # We need to check if there is already one open (the version requested doesn't matter)
             for pullrequest in repo.pullrequests.each():
@@ -398,7 +386,7 @@ class BitbucketCloud(SccsApi):
             "POST",
             repo.url + "/src",
             data={
-                f'/{cd_environment_config["version"]["file"]}': f"{version}\n",
+                f'/{cd_environment_config.version["file"]}': f"{version}\n",
                 "message": f"deploy version {version}",
                 "author": await self.get_session_author(session),
                 "branch": branch if deploy_branch is None else deploy_branch.name,
@@ -448,7 +436,7 @@ class BitbucketCloud(SccsApi):
                 (_, cfg) = await self.get_continuous_deployment_config_by_branch(
                     repo_name,
                     repo=repo,
-                    branch_name=environment["branch"],
+                    branch_name=environment.branch,
                     config=environment,
                 )
             except Exception:
@@ -488,25 +476,25 @@ class BitbucketCloud(SccsApi):
         repository: str,
         version: str,
         branch: str,
-        config: dict,
+        config: Environment,
         pullrequest: str | None = None,
         # buildStatus: str = "SUCCESSFUL",
     ) -> typing_cd.EnvironmentConfig:
         """
         Helper function to standardize the creation of EnvironmentConfig
         """
-        trigger_config = config.get("trigger", {})
+        trigger_config = config.trigger
         env = typing_cd.EnvironmentConfig(
             key=hash((repository, branch)),
             version=version,
-            environment=config["name"],
+            environment=config.name,
             readonly=not trigger_config.get("enabled", True),
             pullrequest=pullrequest if trigger_config.get("pullrequest", False) else None,
         )
         return env
 
     async def get_continuous_deployment_config_by_branch(
-        self, repository: str, repo: Repository, branch_name: str, config: dict
+        self, repository: str, repo: Repository, branch_name: str, config: Environment
     ) -> tuple[str, typing_cd.EnvironmentConfig]:
         """
         Get environment configuration for a specific branch
@@ -515,7 +503,7 @@ class BitbucketCloud(SccsApi):
             f"Getting continuous deployment config for '{repository}' on branch '{branch_name}'"
         )
         # Get version
-        version_file = config["version"].get("file")
+        version_file = config.version.get("file")
         commit_hash = repo.branches.get(branch_name).hash
         version: str
         if version_file is not None:
@@ -534,19 +522,19 @@ class BitbucketCloud(SccsApi):
                 raise SccsException(
                     f"failed to get version from {version_file} for {repository} on {branch_name}"
                 )
-        elif config["version"].get("git", False):
+        elif config.version.get("git", False):
             version = commit_hash  # basically only the master branch
         else:
             raise NotImplementedError()
 
         pullrequest_link = None
 
-        if config.get("trigger", {}).get("pullrequest", False):
+        if config.trigger.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
             for pullrequest in repo.pullrequests.each():
-                if pullrequest.destination_branch == config[
-                    "branch"
-                ] and self.cd_pullrequest_tag in (pullrequest.title or ""):
+                if pullrequest.destination_branch == config.branch and self.cd_pullrequest_tag in (
+                    pullrequest.title or ""
+                ):
                     link = pullrequest.get_link("html")
                     pullrequest_link = link["href"] if type(link) is dict else link
                     break
