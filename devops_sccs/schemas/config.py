@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Extra
 
 
 class From(BaseModel):
@@ -64,24 +64,16 @@ class Storage(BaseModel):
     repo: str
 
 
-class VaultConfig(BaseModel):
-    skip_vault: bool = False
-    tmp: str
-    vault_secret: str
-    vault_mount: str
-
-
 class EscalationDetails(BaseModel):
     repository: str
     permissions: list[str]
 
 
-class PluginConfig(BaseModel):
+class PluginConfig(BaseModel, extra=Extra.allow):
     team: str
     watcher: WatcherCreds
     continuous_deployment: ContinuousDeployment
     storage: Storage
-    vault_config: VaultConfig = Field(..., alias="su")
     escalation: dict[str, EscalationDetails]
 
 
