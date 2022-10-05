@@ -21,7 +21,8 @@ from urllib.error import HTTPError
 import requests
 from atlassian.bitbucket import Cloud
 from atlassian.bitbucket.cloud.repositories import Repository
-from atlassian.errors import ApiNotFoundError, ApiPermissionError
+from atlassian.bitbucket.cloud.workspaces import Workspace
+from atlassian.errors import ApiNotFoundError
 
 from devops_console.schemas import WebhookEvent
 from devops_sccs.schemas.config import Environment, PluginConfig
@@ -192,16 +193,22 @@ class BitbucketCloud(SccsApi):
         return result
 
     @ats_cache()
-    async def get_repository(self, session: Cloud, repo_name: str) -> Repository | None:
+    async def api_workspaces(self, session: Cloud) -> Workspace:
+        return session.workspaces.get(self.team)
+
+    @ats_cache()
+    async def get_repository(self, session: Cloud, repo_name: str) -> typing_repo.Repository | None:
         """see plugin.py"""
-        try:
-            return session.workspaces.get(self.team).repositories.get(repo_name, by="name")
-        except ApiPermissionError:
-            logging.warning(f'user "{session.username}" has no permission for "{repo_name}"')
-            return None
-        except Exception:
-            logging.warning(f"repository {repo_name} not found")
-            return None
+        repos = await self.get_repositories(session)
+        for repo in repos:
+            if repo.name == repo_name:
+                return repo
+        return None
+
+    @ats_cache()
+    async def get_api_repository(self, session: Cloud, repo_name: str) -> Repository | None:
+        """see plugin.py"""
+        return (await self.api_workspaces(session)).repositories.get(repo_name)
 
     async def add_repository(
         self,
@@ -235,7 +242,7 @@ class BitbucketCloud(SccsApi):
 
         results: list[typing_cd.EnvironmentConfig] = []
 
-        repo = await self.get_repository(session, repo_name)
+        repo = await self.get_api_repository(session, repo_name)
         if repo is None:
             return results
 
@@ -278,7 +285,7 @@ class BitbucketCloud(SccsApi):
         self.__log_session(session)
         versions: list[typing_cd.Available] = []
 
-        repo = await self.get_repository(session, repo_name)
+        repo = await self.get_api_repository(session, repo_name)
         if repo is None:
             return versions
 
@@ -348,7 +355,7 @@ class BitbucketCloud(SccsApi):
             continuous_deployment, versions_available, repo_name, environment, version
         )
 
-        repo = await self.get_repository(session, repo_name)
+        repo = await self.get_api_repository(session, repo_name)
         if repo is None:
             raise TriggerCdEnvUnsupported(repo_name, environment)
 
@@ -427,7 +434,7 @@ class BitbucketCloud(SccsApi):
 
         envs: list[typing_cd.EnvironmentConfig] = []
 
-        repo = await self.get_repository(session, repo_name)
+        repo = await self.get_api_repository(session, repo_name)
         if repo is None:
             return envs
 
@@ -571,7 +578,7 @@ class BitbucketCloud(SccsApi):
 
     @ats_cache()
     async def get_webhook_subscriptions(self, session: Cloud, repo_name: str):
-        repo = await self.get_repository(session, repo_name)
+        repo = await self.get_api_repository(session, repo_name)
         if repo is None:
             return None
         return repo.get("hooks")
@@ -588,7 +595,7 @@ class BitbucketCloud(SccsApi):
         events: list[WebhookEvent],
         description: str,
     ):
-        repo = await self.get_repository(session, repo_name)
+        repo = await self.get_api_repository(session, repo_name)
         if repo is None:
             return None
 
@@ -603,7 +610,7 @@ class BitbucketCloud(SccsApi):
         )
 
     async def delete_webhook_subscription(self, session: Cloud, repo_name, subscription_id) -> None:
-        repo = await self.get_repository(session, repo_name)
+        repo = await self.get_api_repository(session, repo_name)
         if repo is None:
             return None
 
