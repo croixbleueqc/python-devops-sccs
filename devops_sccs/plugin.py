@@ -430,3 +430,7 @@ class SccsApi(ABC):
     @abstractmethod
     async def delete_webhook_subscription(self, session, repo_name, subscription_id):
         raise NotImplementedError()
+
+    @abstractmethod
+    async def get_repository_permission(selrf, session, repo_name) -> str | None:
+        raise NotImplementedError()
