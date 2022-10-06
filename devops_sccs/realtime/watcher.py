@@ -42,7 +42,15 @@ class Watcher(object):
         def get_exception(self):
             return self.exception
 
-    def __init__(self, watcher_id: int, poll_interval: int, func: Callable, *args, **kwargs):
+    def __init__(
+        self,
+        watcher_id: int,
+        poll_interval: int,
+        func: Callable,
+        *args,
+        bypass_func_cache=False,
+        **kwargs
+    ):
         # Id
         self.wid = watcher_id
 
@@ -54,20 +62,23 @@ class Watcher(object):
         # Polling
         self.poll_interval = poll_interval
         self.poll_event = asyncio.Event()
+        self.bypass_func_cache = bypass_func_cache
 
         # Caching
         self.cache: OrderedDict[int, Any] = OrderedDict()
 
         # function
-        self.func = lambda: func(*args, **kwargs)
+        self.func = lambda: func(*args, **kwargs, fetch=self.bypass_func_cache)
 
         # tasks
         self.running_task = None
 
-    def refresh(self):
+    def refresh(self, bypass_cache: bool = False):
         """
-        Force a refresh (notify the watch to refresh as soon as possible)
+        Force a refresh (notify the watch to refresh as soon as possible); and optionally bypass the
+        function's cache (ats_cache)
         """
+        self.bypass_func_cache = bypass_cache
         self.poll_event.set()
 
     async def subscribe(self, queue: asyncio.Queue):
@@ -118,6 +129,9 @@ class Watcher(object):
             self.poll_event.clear()
 
             values = await self.func()
+
+            # !!! Revert cache bypass
+            self.bypass_func_cache = False
 
             if not isinstance(values, list):
                 values = [values]
@@ -177,7 +191,7 @@ class Watcher(object):
         refresh at fixed interval (polling)
         """
         while True:
-            self.refresh()
+            self.refresh(self.bypass_func_cache)
             await asyncio.sleep(self.poll_interval)
 
     def start(self):
