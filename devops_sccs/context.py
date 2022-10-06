@@ -200,3 +200,6 @@ class Context:
 
     async def get_projects(self):
         return await self.plugin.get_projects(self.session)
+
+    async def get_repository_permission(self, repo_name):
+        return await self.plugin.get_repository_permission(self.session, repo_name)

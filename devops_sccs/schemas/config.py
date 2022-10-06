@@ -1,12 +1,13 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, Extra
 
 
 class From(BaseModel):
     git: str = Field(
         ...,
-        regex=r"(^git@bitbucket\.org:croixbleue/[a-zA-Z0-9-_]+\.git$|^https://[w]{0,3}\.?github.com/croixbleueqc/[a-zA-Z0-9-_]+(.git)?$)",
+        regex=r"(^git@bitbucket\.org:croixbleue/[a-zA-Z0-9-_]+\.git$|^https://"
+        r"[w]{0,3}\.?github.com/croixbleueqc/[a-zA-Z0-9-_]+(.git)?$)",
     )
     main_branch: str
     other_branches: list[str] = []
@@ -31,10 +32,55 @@ class Template(BaseModel):
     setup: Setup
 
 
+class WatcherCreds(BaseModel):
+    user: str
+    pwd: str
+
+
+class Environment(BaseModel):
+    name: str
+    branch: str
+    version: dict[str, str]
+    trigger: dict[str, bool] = {}
+
+
+class PullRequest(BaseModel):
+    tag: str
+
+
+class Pipeline(BaseModel):
+    versions_available: list[str]
+
+
+class ContinuousDeployment(BaseModel):
+    environments: list[Environment]
+    pullrequest: PullRequest
+    pipeline: Pipeline
+
+
+class Storage(BaseModel):
+    path: str
+    git: str
+    repo: str
+
+
+class EscalationDetails(BaseModel):
+    repository: str
+    permissions: list[str]
+
+
+class PluginConfig(BaseModel, extra=Extra.allow):
+    team: str
+    watcher: WatcherCreds
+    continuous_deployment: ContinuousDeployment
+    storage: Storage
+    escalation: dict[str, EscalationDetails]
+
+
 class Plugins(BaseModel):
     external: str
     builtin: dict[str, bool]
-    config: dict[str, Any]
+    config: dict[str, PluginConfig]
 
 
 class MainContract(BaseModel):

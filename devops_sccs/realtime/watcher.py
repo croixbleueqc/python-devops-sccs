@@ -54,23 +54,20 @@ class Watcher(object):
         # Polling
         self.poll_interval = poll_interval
         self.poll_event = asyncio.Event()
-        self.fetch = False  # cache invalidation flag
 
         # Caching
         self.cache: OrderedDict[int, Any] = OrderedDict()
 
         # function
-        self.func = lambda fetch=False: func(*args, **kwargs, fetch=fetch)
+        self.func = lambda: func(*args, **kwargs)
 
         # tasks
         self.running_task = None
 
-    def refresh(self, fetch: bool = False):
+    def refresh(self):
         """
         Force a refresh (notify the watch to refresh as soon as possible)
         """
-        # logging.info(f"watcher: refresh for {self.wid}")
-        self.fetch = fetch
         self.poll_event.set()
 
     async def subscribe(self, queue: asyncio.Queue):
@@ -120,11 +117,7 @@ class Watcher(object):
             await self.poll_event.wait()
             self.poll_event.clear()
 
-            values = await self.func(fetch=self.fetch)
-
-            # !!! reset fetch flag
-            if self.fetch:
-                self.fetch = False
+            values = await self.func()
 
             if not isinstance(values, list):
                 values = [values]
