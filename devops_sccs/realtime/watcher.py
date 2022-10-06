@@ -198,7 +198,7 @@ class Watcher(object):
                 timed_task = asyncio.create_task(self.timed_refresh())
                 await asyncio.gather(watch_task, timed_task)
             except Exception as e:
-                logging.error("watcher: an exception occured during the polling")
+                logging.error("watcher: an exception occurred during the polling")
                 if watch_task:
                     watch_task.cancel()
                 if timed_task:
@@ -210,8 +210,9 @@ class Watcher(object):
                     event = Watcher.CloseSessionOnException(e)
                     self._dispatch(event)
 
-                # stop will be called once all clients will unsubscribe to this watcher. This is handled by the scheduler
-                # at this point, the watch is not running anymore and it is not possible to add new client on this watcher
+                # stop will be called once all clients will unsubscribe to this watcher. This is handled by the
+                # scheduler at this point, the watch is not running anymore and it is not possible to add new
+                # client on this watcher
 
         self.running_task = asyncio.create_task(async_start())
 

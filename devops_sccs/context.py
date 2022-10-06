@@ -144,6 +144,7 @@ class Context:
             **kwargs,
         )
 
+    # TODO: remove this method (unused)
     async def bridge_repository_to_namespace(
         self, repo_name: str, environment: str, untrustable=True
     ):

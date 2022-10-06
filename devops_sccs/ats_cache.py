@@ -126,7 +126,8 @@ def ats_cache(
                     misses += 1
 
             logging.debug(
-                f"\nCache wrap for {func.__name__}\n\twith args: {args}\n\tand kwargs: {kwargs}\n\n\tCache hits: {hits}, misses: {misses}"
+                f"\nCache wrap for {func.__name__}\n\twith args: {args}\n\tand kwargs: {kwargs}\n\n\tCache hits: {hits}"
+                ", misses: {misses}"
             )
             return cache[key].value
 
