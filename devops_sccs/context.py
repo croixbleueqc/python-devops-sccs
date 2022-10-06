@@ -86,6 +86,7 @@ class Context:
             session=None,  # Shared session, ie admin session
             repo_name=repo_name,
             environments=environments,
+            bypass_func_cache=True,
             *args,
             **kwargs,
         )

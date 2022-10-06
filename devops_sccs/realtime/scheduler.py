@@ -98,4 +98,4 @@ class Scheduler(object):
 
         if w is not None:
             logging.debug(f"notify {hex(wid)}")
-            w.refresh()
+            w.refresh(True)
