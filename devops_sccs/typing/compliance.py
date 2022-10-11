@@ -32,7 +32,7 @@ class CurrentExpected(str, Enum):
     MATCH = "match"
     UNMATCH = "unmatch"
     UNKNOWN = "unknown"
-    AVAILABE = "available"
+    AVAILABLE = "available"
     UNAVAILABLE = "unavailable"
 
 
