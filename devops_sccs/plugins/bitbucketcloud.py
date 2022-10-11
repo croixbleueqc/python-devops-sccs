@@ -35,6 +35,7 @@ from ..provision import Provision
 from ..typing import cd as typing_cd, repositories as typing_repo
 from ..typing.credentials import Credentials
 from ..utils import cd as utils_cd
+from ..utils.aioify import run_async
 
 PLUGIN_NAME = "bitbucketcloud"
 
@@ -161,8 +162,10 @@ class BitbucketCloud(SccsApi):
         logging.debug(f"Assessing access rights for {repo_name}")
 
         # will raise ApiPermissionError if access is forbidden
-        permissions: dict = session.get(
-            "user/permissions/repositories", params=[("q", f'repository.name="{repo_name}"')]
+        permissions: dict = await run_async(
+            session.get,
+            "user/permissions/repositories",
+            params=[("q", f'repository.name="{repo_name}"')],
         )  # type: ignore
         logging.debug(f'Permissions for {repo_name}: {permissions["values"][0]["permission"]}')
 
@@ -178,23 +181,26 @@ class BitbucketCloud(SccsApi):
     ) -> list[typing_repo.Repository]:
         """see plugin.py"""
 
-        result: list[typing_repo.Repository] = []
-
-        for repo in session._get_paged("user/permissions/repositories", params={"pagelen": 100}):
-            assert isinstance(repo, dict)
-            result.append(
-                typing_repo.Repository(
-                    key=hash(repo["repository"]["name"]),
-                    name=repo["repository"]["name"],
-                    permission=repo["permission"],
+        def get_repos_sync():
+            result: list[typing_repo.Repository] = []
+            for repo in session._get_paged(
+                "user/permissions/repositories", params={"pagelen": 100}
+            ):
+                assert isinstance(repo, dict)
+                result.append(
+                    typing_repo.Repository(
+                        key=hash(repo["repository"]["name"]),
+                        name=repo["repository"]["name"],
+                        permission=repo["permission"],
+                    )
                 )
-            )
+            return result
 
-        return result
+        return await run_async(get_repos_sync)
 
     @ats_cache()
     async def api_workspaces(self, session: Cloud) -> Workspace:
-        return session.workspaces.get(self.team)
+        return await run_async(session.workspaces.get, self.team)
 
     @ats_cache()
     async def get_repository(self, session: Cloud, repo_name: str) -> typing_repo.Repository | None:
@@ -208,7 +214,10 @@ class BitbucketCloud(SccsApi):
     @ats_cache()
     async def get_api_repository(self, session: Cloud, repo_name: str) -> Repository | None:
         """see plugin.py"""
-        return (await self.api_workspaces(session)).repositories.get(repo_name)
+
+        workspace = await self.api_workspaces(session)
+
+        return await run_async(workspace.repositories.get, repo_name)
 
     async def add_repository(
         self,
@@ -218,8 +227,8 @@ class BitbucketCloud(SccsApi):
         template: str,
         template_params: dict,
     ):
-        return super().add_repository(
-            session, provision, repo_definition, template, template_params
+        return await run_async(
+            super().add_repository, session, provision, repo_definition, template, template_params
         )
 
     @ats_cache(
@@ -246,20 +255,25 @@ class BitbucketCloud(SccsApi):
         if repo is None:
             return results
 
-        deploys = []
-        # Get supported branches
-        for branch in repo.branches.each():
-            try:
-                index = self.cd_branches_accepted.index(branch.name)
-                if len(environments) == 0 or self.cd_environments[index].name in environments:
-                    deploys.append((branch.name, index))
-            except (KeyError, ValueError):
-                pass
+        def get_deploys_sync():
+            deploys = []
+            # Get supported branches
+            for branch in repo.branches.each():
+                try:
+                    index = self.cd_branches_accepted.index(branch.name)
+                    if len(environments) == 0 or self.cd_environments[index].name in environments:  # type: ignore
+                        deploys.append((branch.name, index))
+                except (KeyError, ValueError):
+                    pass
 
-        if len(deploys) == 0:
-            raise SccsException(f"Continuous deployment not supported for {repo_name}")
+            if len(deploys) == 0:
+                raise SccsException(f"Continuous deployment not supported for {repo_name}")
 
-        deploys.sort(key=lambda x: x[1])
+            deploys.sort(key=lambda x: x[1])
+
+            return deploys
+
+        deploys = await run_async(get_deploys_sync)
 
         for branch, index in deploys:
             env_config = await self.get_continuous_deployment_config_by_branch(
@@ -291,23 +305,28 @@ class BitbucketCloud(SccsApi):
 
         logging.info(f"list cd version available : {self.cd_versions_available}")
 
-        for pipeline in repo.pipelines.each(q="target.ref_name=master", sort="-created_on"):
-            target = pipeline.get_data("target")
-            state = pipeline.get_data("state")
-            if target is None or state is None or target["type"] != "pipeline_ref_target":
-                continue
-            ref_name = target["ref_name"]
-            result_name = state["result"]["name"]
-            if ref_name in self.cd_versions_available and result_name == "SUCCESSFUL":
-                available = typing_cd.Available(
-                    key=hash((repo_name, pipeline.build_number)),
-                    build=str(pipeline.build_number),
-                    version=target["commit"]["hash"],
-                )
-                logging.debug(f"adding version available for build nb : {pipeline.build_number}")
-                versions.append(available)
+        def get_versions_sync():
+            for pipeline in repo.pipelines.each(q="target.ref_name=master", sort="-created_on"):
+                target = pipeline.get_data("target")
+                state = pipeline.get_data("state")
+                if target is None or state is None or target["type"] != "pipeline_ref_target":
+                    continue
+                ref_name = target["ref_name"]
+                result_name = state["result"]["name"]
+                if ref_name in self.cd_versions_available and result_name == "SUCCESSFUL":
+                    available = typing_cd.Available(
+                        key=hash((repo_name, pipeline.build_number)),
+                        build=str(pipeline.build_number),
+                        version=target["commit"]["hash"],
+                    )
+                    logging.debug(
+                        f"adding version available for build nb : {pipeline.build_number}"
+                    )
+                    versions.append(available)
 
-        return versions
+            return versions
+
+        return await run_async(get_versions_sync)
 
     async def trigger_continuous_deployment(
         self, session: Cloud, repo_name: str, environment: str, version: str
@@ -364,38 +383,44 @@ class BitbucketCloud(SccsApi):
         if cd_environment_config.trigger.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
             # We need to check if there is already one open (the version requested doesn't matter)
-            for pullrequest in repo.pullrequests.each():
-                if (
-                    pullrequest.destination_branch == branch
-                    and pullrequest.title is not None
-                    and self.cd_pullrequest_tag in pullrequest.title
-                ):
-                    link = pullrequest.get_link("html")
-                    raise SccsException(
-                        f"A continuous deployment request is already open. link: {link['href'] if link else None}"
-                    )
+            def check_pr_sync():
+                for pullrequest in repo.pullrequests.each():
+                    if (
+                        pullrequest.destination_branch == branch
+                        and pullrequest.title is not None
+                        and self.cd_pullrequest_tag in pullrequest.title
+                    ):
+                        link = pullrequest.get_link("html")
+                        raise SccsException(
+                            f"A continuous deployment request is already open. link: {link['href'] if link else None}"
+                        )
 
-            deploy_branch = repo.branches.get(name=branch)
+            await run_async(check_pr_sync)
+
+            deploy_branch = await run_async(repo.branches.get, name=branch)
 
             deploy_branch.name = f"continuous-deployment-{environment}"
             try:
                 # If the branch already exists, we should remove it.
-                repo.branches.delete(path=f"{deploy_branch.name}")
+                await run_async(repo.branches.delete, path=f"{deploy_branch.name}")
             except ApiNotFoundError:
                 pass
-            await deploy_branch.create()
+            await run_async(deploy_branch.create)
         else:
             deploy_branch = None
 
+        author = await self.get_session_author(session)
+
         # see https://github.com/atlassian-api/atlassian-python-api/issues/1045#issue-1368184335
         # for the reason why we need to use the requests library directly
-        requests.request(
+        await run_async(
+            requests.request,
             "POST",
             repo.url + "/src",
             data={
                 f'/{cd_environment_config.version["file"]}': f"{version}\n",
                 "message": f"deploy version {version}",
-                "author": await self.get_session_author(session),
+                "author": author,
                 "branch": branch if deploy_branch is None else deploy_branch.name,
             },
             auth=(session.username, session.password),  # type: ignore
@@ -403,7 +428,8 @@ class BitbucketCloud(SccsApi):
 
         if deploy_branch is not None:
             # Continuous Deployment is done with a PR.
-            pr = repo.pullrequests.create(
+            pr = await run_async(
+                repo.pullrequests.create,
                 title=f"Ugrade {environment} {self.cd_pullrequest_tag}",
                 source_branch=deploy_branch.name,
                 destination_branch=branch,
@@ -511,11 +537,12 @@ class BitbucketCloud(SccsApi):
         )
         # Get version
         version_file = config.version.get("file")
-        commit_hash = repo.branches.get(branch_name).hash
+        commit_hash = (await run_async(repo.branches.get, branch_name)).hash
         version: str
         if version_file is not None:
             try:
-                res: bytes | None = repo.get(
+                res: bytes | None = await run_async(
+                    repo.get,
                     path=f"src/{commit_hash}/{version_file}",
                     not_json_response=True,
                 )  # type: ignore
@@ -538,13 +565,18 @@ class BitbucketCloud(SccsApi):
 
         if config.trigger.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
-            for pullrequest in repo.pullrequests.each():
-                if pullrequest.destination_branch == config.branch and self.cd_pullrequest_tag in (
-                    pullrequest.title or ""
-                ):
-                    link = pullrequest.get_link("html")
-                    pullrequest_link = link["href"] if type(link) is dict else link
-                    break
+            def pr_sync():
+                nonlocal pullrequest_link
+                for pullrequest in repo.pullrequests.each():
+                    if (
+                        pullrequest.destination_branch == config.branch
+                        and self.cd_pullrequest_tag in (pullrequest.title or "")
+                    ):
+                        link = pullrequest.get_link("html")
+                        pullrequest_link = link["href"] if type(link) is dict else link
+                        break
+
+            await run_async(pr_sync)
 
         return (
             branch_name,
@@ -557,7 +589,8 @@ class BitbucketCloud(SccsApi):
     async def get_repository_permission(self, session: Cloud, repo_name: str) -> str | None:
         # get repository permissions for user
         try:
-            res = session.get(
+            res = await run_async(
+                session.get,
                 "user/permissions/repositories",
                 params={"repository.name": repo_name},
             )
@@ -574,14 +607,14 @@ class BitbucketCloud(SccsApi):
     @ats_cache()
     async def get_projects(self, session: Cloud):
         """Return a list of projects"""
-        return session.get(f"/2.0/workspaces/{self.team}/projects")
+        return await run_async(session.get, f"/2.0/workspaces/{self.team}/projects")
 
     @ats_cache()
     async def get_webhook_subscriptions(self, session: Cloud, repo_name: str):
         repo = await self.get_api_repository(session, repo_name)
         if repo is None:
             return None
-        return repo.get("hooks")
+        return await run_async(repo.get, "hooks")
 
     async def get_webhook_subscription_for_repo(self, session: Cloud, repo_name):
         return await super().get_webhook_subscription_for_repo(session, repo_name)
@@ -599,7 +632,8 @@ class BitbucketCloud(SccsApi):
         if repo is None:
             return None
 
-        return repo.post(
+        return await run_async(
+            repo.post,
             path="hooks",
             json={
                 "url": url,
@@ -614,7 +648,8 @@ class BitbucketCloud(SccsApi):
         if repo is None:
             return None
 
-        repo.request(
+        await run_async(
+            repo.request,
             method="DELETE",
             path=f"hooks/{subscription_id}",
         )
