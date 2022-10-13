@@ -45,8 +45,8 @@ class Context:
     async def get_repositories(self):
         return await self.plugin.get_repositories(self.session)
 
-    async def get_repository(self, repository):
-        return await self.plugin.get_repository(self.session, repository)
+    async def get_repository(self, repo_name):
+        return await self.plugin.get_repository(self.session, repo_name)
 
     async def watch_repositories(self, poll_interval: int, *args, **kwargs):
         return self._client.scheduler.watch(
@@ -64,12 +64,12 @@ class Context:
         )
 
     async def watch_continuous_deployment_config(
-        self,
-        repo_name: str,
-        environments: list | None,
-        poll_interval: int,
-        *args,
-        **kwargs,
+            self,
+            repo_name: str,
+            environments: list | None,
+            poll_interval: int,
+            *args,
+            **kwargs,
     ):
         if environments is None:
             environments = []
@@ -97,7 +97,7 @@ class Context:
         )
 
     async def watch_continuous_deployment_versions_available(
-        self, repo_name: str, poll_interval: int, *args, **kwargs
+            self, repo_name: str, poll_interval: int, *args, **kwargs
     ):
         await self.accesscontrol(repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
 
@@ -126,7 +126,7 @@ class Context:
         )
 
     async def watch_continuous_deployment_environments_available(
-        self, repo_name, poll_interval: int, *args, **kwargs
+            self, repo_name, poll_interval: int, *args, **kwargs
     ):
         await self.accesscontrol(
             repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
@@ -147,7 +147,7 @@ class Context:
 
     # TODO: remove this method (unused)
     async def bridge_repository_to_namespace(
-        self, repo_name: str, environment: str, untrustable=True
+            self, repo_name: str, environment: str, untrustable=True
     ):
         return await self.plugin.bridge_repository_to_namespace(
             self.session, repo_name, environment, untrustable
@@ -184,11 +184,8 @@ class Context:
     async def compliance_report_repository(self, repo_name):
         return await self.plugin.compliance_report_repository(self.session, repo_name)
 
-    async def get_webhook_subscriptions(self):
-        return await self.plugin.get_webhook_subscriptions(self.session)
-
-    async def get_webhook_subscription_for_repo(self, repo_name):
-        return await self.plugin.get_webhook_subscription_for_repo(self.session, repo_name)
+    async def get_webhook_subscriptions(self, repo_name: str):
+        return await self.plugin.get_webhook_subscriptions(self.session, repo_name)
 
     async def create_webhook_subscription(self, repo_name, url, active, events, description):
         return await self.plugin.create_webhook_subscription_for_repo(

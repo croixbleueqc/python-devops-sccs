@@ -631,9 +631,6 @@ class BitbucketCloud(SccsApi):
             return None
         return await run_async(repo.get, "hooks")
 
-    async def get_webhook_subscription_for_repo(self, session: Cloud, repo_name):
-        return await super().get_webhook_subscription_for_repo(session, repo_name)
-
     async def create_webhook_subscription_for_repo(
             self,
             session: Cloud,
