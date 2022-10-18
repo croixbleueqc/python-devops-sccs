@@ -41,10 +41,10 @@ def makekey(args: tuple, kwargs: dict):
 
 
 def ats_cache(
-    maxsize: int | None = 1000,
-    ttl: float = 3600.0,
-    miss_callback: Callable = lambda _: _,
-):
+        maxsize: int | None = 1000,
+        ttl: float = 3600.0,
+        miss_callback: Callable = lambda _: _,
+        ):
     """An asynchronous, thread-safe, TLRU cache. Used to decorate expensive **methods**.
 
     Arguments:
@@ -127,8 +127,8 @@ def ats_cache(
 
             logging.debug(
                 f"\nCache wrap for {func.__name__}\n\twith args: {args}\n\tand kwargs: {kwargs}\n\n\tCache hits: {hits}"
-                ", misses: {misses}"
-            )
+                f", misses: {misses}"
+                )
             return cache[key].value
 
         def cache_info():
