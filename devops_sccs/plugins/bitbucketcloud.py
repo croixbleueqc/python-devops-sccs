@@ -131,8 +131,8 @@ class BitbucketCloud(SccsApi):
                     # not used anymore
                     logging.debug(f"Removing session {session_id} from local cache")
                     self.local_sessions.pop(session_id)
-            except Exception as e:
-                logging.error(f"Error while closing session {session_id}: {e}")
+            except Exception:
+                logging.error(f"Error while closing session {session_id}")
                 pass
 
     async def get_stored_session(
