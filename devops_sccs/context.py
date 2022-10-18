@@ -56,12 +56,12 @@ class Context:
             session=self.session,
             *args,
             **kwargs,
-        )
+            )
 
     async def get_continuous_deployment_config(self, repo_name, environments=[]):
         return await self.plugin.get_continuous_deployment_config(
             self.session, repo_name, environments
-        )
+            )
 
     async def watch_continuous_deployment_config(
             self,
@@ -70,7 +70,7 @@ class Context:
             poll_interval: int,
             *args,
             **kwargs,
-    ):
+            ):
         if environments is None:
             environments = []
         await self.accesscontrol(repo_name, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
@@ -86,19 +86,19 @@ class Context:
             session=None,  # Shared session, ie admin session
             repo_name=repo_name,
             environments=environments,
-            bypass_func_cache=True,
+            bypass_func_cache=False,
             *args,
             **kwargs,
-        )
+            )
 
     async def get_continuous_deployment_versions_available(self, repository):
         return await self.plugin.get_continuous_deployment_versions_available(
             self.session, repository
-        )
+            )
 
     async def watch_continuous_deployment_versions_available(
             self, repo_name: str, poll_interval: int, *args, **kwargs
-    ):
+            ):
         await self.accesscontrol(repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
 
         return self._client.scheduler.watch(
@@ -109,12 +109,12 @@ class Context:
             repo_name=repo_name,
             *args,
             **kwargs,
-        )
+            )
 
     async def trigger_continuous_deployment(self, repository, environment, version):
         result = await self.plugin.trigger_continuous_deployment(
             self.session, repository, environment, version
-        )
+            )
 
         self._client.scheduler.notify((Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository))
 
@@ -123,35 +123,35 @@ class Context:
     async def get_continuous_deployment_environments_available(self, repo_name):
         return await self.plugin.get_continuous_deployment_environments_available(
             self.session, repo_name
-        )
+            )
 
     async def watch_continuous_deployment_environments_available(
             self, repo_name, poll_interval: int, *args, **kwargs
-    ):
+            ):
         await self.accesscontrol(
             repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
-        )
+            )
 
         return self._client.scheduler.watch(
             (
                 Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE,
                 repo_name,
-            ),
+                ),
             poll_interval,
             self.plugin.get_continuous_deployment_environments_available,
             session=None,  # Shared session, ie admin session
             repo_name=repo_name,
             *args,
             **kwargs,
-        )
+            )
 
     # TODO: remove this method (unused)
     async def bridge_repository_to_namespace(
             self, repo_name: str, environment: str, untrustable=True
-    ):
+            ):
         return await self.plugin.bridge_repository_to_namespace(
             self.session, repo_name, environment, untrustable
-        )
+            )
 
     def get_add_repository_contract(self):
         return self._client.provision.get_add_repository_contract()
@@ -163,7 +163,7 @@ class Context:
             repository,
             template,
             template_params,
-        )
+            )
 
         self._client.scheduler.notify((Context.UUID_WATCH_REPOSITORIES, self.session_id))
 
@@ -190,12 +190,12 @@ class Context:
     async def create_webhook_subscription(self, repo_name, url, active, events, description):
         return await self.plugin.create_webhook_subscription_for_repo(
             self.session, repo_name, url, active, events, description
-        )
+            )
 
     async def delete_webhook_subscription(self, repo_name, subscription_id):
         return await self.plugin.delete_webhook_subscription(
             self.session, repo_name, subscription_id
-        )
+            )
 
     async def get_projects(self):
         return await self.plugin.get_projects(self.session)

@@ -159,6 +159,7 @@ class BitbucketCloud(SccsApi):
     def __new__(cls):
         return super().__new__(cls)
 
+    @ats_cache()
     async def accesscontrol(self, session: Cloud, repo_name: str, action: int):
         """see plugin.py"""
         logging.debug(f"Assessing access rights for {repo_name}")
