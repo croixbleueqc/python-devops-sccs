@@ -55,8 +55,7 @@ class Context:
             self.plugin.get_repositories,
             session=self.session,
             *args,
-            **kwargs,
-            )
+            **kwargs, )
 
     async def get_continuous_deployment_config(self, repo_name, environments=[]):
         return await self.plugin.get_continuous_deployment_config(
@@ -64,13 +63,7 @@ class Context:
             )
 
     async def watch_continuous_deployment_config(
-            self,
-            repo_name: str,
-            environments: list | None,
-            poll_interval: int,
-            *args,
-            **kwargs,
-            ):
+            self, repo_name: str, environments: list | None, poll_interval: int, *args, **kwargs, ):
         if environments is None:
             environments = []
         await self.accesscontrol(repo_name, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
@@ -83,13 +76,13 @@ class Context:
             poll_interval,
             self.plugin.get_continuous_deployment_config,
             filtering=filtering_by_environment,
-            session=None,  # Shared session, ie admin session
+            session=None,
+            # Shared session, ie admin session
             repo_name=repo_name,
             environments=environments,
             bypass_func_cache=False,
             *args,
-            **kwargs,
-            )
+            **kwargs, )
 
     async def get_continuous_deployment_versions_available(self, repository):
         return await self.plugin.get_continuous_deployment_versions_available(
@@ -105,11 +98,11 @@ class Context:
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repo_name),
             poll_interval,
             self.plugin.get_continuous_deployment_versions_available,
-            session=None,  # Shared session, ie admin session
+            session=None,
+            # Shared session, ie admin session
             repo_name=repo_name,
             *args,
-            **kwargs,
-            )
+            **kwargs, )
 
     async def trigger_continuous_deployment(self, repository, environment, version):
         result = await self.plugin.trigger_continuous_deployment(
@@ -133,17 +126,14 @@ class Context:
             )
 
         return self._client.scheduler.watch(
-            (
-                Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE,
-                repo_name,
-                ),
+            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repo_name,),
             poll_interval,
             self.plugin.get_continuous_deployment_environments_available,
-            session=None,  # Shared session, ie admin session
+            session=None,
+            # Shared session, ie admin session
             repo_name=repo_name,
             *args,
-            **kwargs,
-            )
+            **kwargs, )
 
     # TODO: remove this method (unused)
     async def bridge_repository_to_namespace(
@@ -153,17 +143,12 @@ class Context:
             self.session, repo_name, environment, untrustable
             )
 
-    def get_add_repository_contract(self):
-        return self._client.provision.get_add_repository_contract()
+    async def get_add_repository_contract(self):
+        return await self._client.provision.get_add_repository_contract()
 
     async def add_repository(self, repository, template, template_params):
         result = await self.plugin.add_repository(
-            self.session,
-            self._client.provision,
-            repository,
-            template,
-            template_params,
-            )
+            self.session, self._client.provision, repository, template, template_params, )
 
         self._client.scheduler.notify((Context.UUID_WATCH_REPOSITORIES, self.session_id))
 

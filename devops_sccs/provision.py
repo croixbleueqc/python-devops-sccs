@@ -83,13 +83,13 @@ class Provision(object):
     def get_templates(self):
         return self.templates
 
-    def get_add_repository_contract(self):
+    async def get_add_repository_contract(self):
         """Provide all contracts to add a new repository"""
         return {
-            "main": self.main_contract,
-            "repository": self.repository_contract,
+            "main": self.main_contract.dict(),
+            "repository": self.repository_contract.dict(),
             "templates": self.templates_contract_cache,
-        }
+            }
 
     def prepare_provision(self, repository, template, template_params):
         """Verify and prepare the repository provisioning
@@ -131,14 +131,14 @@ class Provision(object):
             # Create custom command
             init_template_cmd = self._create_initialize_template_command(
                 self.templates[template].setup, template_params, repository_name
-            )
+                )
 
         # Create storage definition for this new repository
         storage_definition = {
             "repository": repository,
             "template": template,
             "template_params": template_params,
-        }
+            }
 
         # return useful content to provision the new repository
         return repository_name, storage_definition, init_template_cmd
@@ -302,16 +302,16 @@ class Provision(object):
 
     @aioify(pool=POOL)
     def provision(
-        self,
-        destination,
-        destination_main_branch,
-        additional_branches_mapping,
-        template,
-        initialize_template_command,
-        git_credential,
-        author=None,
-        commit_message="Scaffold initialized !",
-    ):
+            self,
+            destination,
+            destination_main_branch,
+            additional_branches_mapping,
+            template,
+            initialize_template_command,
+            git_credential,
+            author=None,
+            commit_message="Scaffold initialized !",
+            ):
         """Provision a newly created repository in your sccs
 
         Workflow:
@@ -342,7 +342,7 @@ class Provision(object):
 
         # User how_to (common steps)
         user_clone = destination
-        user_path = user_clone[user_clone.rfind("/") + 1 : len(user_clone) - 4]
+        user_path = user_clone[user_clone.rfind("/") + 1: len(user_clone) - 4]
         use_me = f"git clone {user_clone}\n"
         use_me += f"cd {user_path}\n"
 
@@ -358,7 +358,7 @@ class Provision(object):
 
         checkout_path = os.path.join(
             self.checkout_base_path, "".join(random.choices(string.ascii_letters, k=32))
-        )
+            )
 
         # Git part
         # see: https://github.com/MichaelBoselowitz/pygit2-examples/blob/master/examples.py
@@ -378,7 +378,7 @@ class Provision(object):
         remote_template.fetch(callbacks=callbacks)
         tpl_oid = intermediate.lookup_reference(
             f"refs/remotes/template/{template_from_main_branch}"
-        ).target
+            ).target
 
         # Git create branch based on template and checkout
         logging.debug(f"{destination}: creating main branch '{destination_main_branch}'")
@@ -416,7 +416,7 @@ class Provision(object):
                 commit_message,
                 tree,
                 [intermediate.head.target],
-            )
+                )
 
         # additional branches
         logging.debug(f"{destination}: adding additional branches")
@@ -429,12 +429,12 @@ class Provision(object):
             if template_branch not in template_from_other_branches:
                 logging.warning(
                     f"{destination}: branch {template_branch} is not available for {template}"
-                )
+                    )
                 continue
 
             tpl_oid = intermediate.lookup_reference(
                 f"refs/remotes/template/{template_branch}"
-            ).target
+                ).target
             commit = intermediate.get(tpl_oid)
             if not commit:
                 raise SccsException(f"{destination}: commit not found")
