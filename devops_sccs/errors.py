@@ -23,7 +23,9 @@ class SccsException(Exception):
 
 class PluginAlreadyRegistered(SccsException):
     def __init__(self, plugin_id):
-        super().__init__(f"{plugin_id} already exist. Please verify that another plugin do not overlap it.")
+        super().__init__(
+            f"{plugin_id} already exist. Please verify that another plugin do not overlap it."
+            )
 
 
 class PluginNotRegistered(SccsException):
@@ -68,7 +70,9 @@ class TriggerCdVersionAlreadyDeployed(SccsException):
 
 class AuthorSyntax(SccsException):
     def __init__(self, author):
-        super().__init__(f"Author {author} is not compliant with the format 'user <user@domain.tld>'")
+        super().__init__(
+            f"Author {author} is not compliant with the format 'user <user@domain.tld>'"
+            )
 
 
 class AccessForbidden(SccsException):

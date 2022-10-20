@@ -30,7 +30,6 @@ from ..errors import SccsException
 from ..typing import WatcherType
 from ..typing.event import Event, EventType
 
-
 _sentinel = object()
 
 
@@ -43,14 +42,14 @@ class Watcher(object):
             return self.exception
 
     def __init__(
-        self,
-        watcher_id: int,
-        poll_interval: int,
-        func: Callable,
-        *args,
-        bypass_func_cache=False,
-        **kwargs
-    ):
+            self,
+            watcher_id: int,
+            poll_interval: int,
+            func: Callable,
+            *args,
+            bypass_func_cache=False,
+            **kwargs
+            ):
         # Id
         self.wid = watcher_id
 
@@ -144,7 +143,7 @@ class Watcher(object):
                         value = WatcherType(
                             key=hash(str(value)),
                             data=value.dict() if hasattr(value, "dict") else value,
-                        )
+                            )
 
                 # DELETED before
                 values_keys = set(v.key for v in values)
@@ -156,7 +155,7 @@ class Watcher(object):
                         _type=EventType.DELETED,
                         value=self.cache.pop(key),
                         key=key,
-                    )
+                        )
 
                     # Dispatch event
                     self._dispatch(event)

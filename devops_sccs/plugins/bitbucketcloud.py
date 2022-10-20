@@ -262,7 +262,8 @@ class BitbucketCloud(SccsApi):
             for branch in repo.branches.each():
                 try:
                     index = self.cd_branches_accepted.index(branch.name)
-                    if len(environments) == 0 or self.cd_environments[index].name in environments:  # type: ignore
+                    if len(environments) == 0 or self.cd_environments[
+                        index].name in environments:  # type: ignore
                         deploys.append((branch.name, index))
                 except (KeyError, ValueError):
                     pass
@@ -323,7 +324,9 @@ class BitbucketCloud(SccsApi):
                     params={"q": "target.ref_name=master", "sort": "-created_on", "pagelen": 100},
                     ):
                 yield Pipeline(
-                    AtlassianRestAPI.url_joiner(repo.pipelines.url, pl["uuid"]), pl, **repo.pipelines._new_session_args
+                    AtlassianRestAPI.url_joiner(repo.pipelines.url, pl["uuid"]),
+                    pl,
+                    **repo.pipelines._new_session_args
                     )
 
         def get_versions_sync():

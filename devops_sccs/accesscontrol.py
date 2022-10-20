@@ -20,6 +20,7 @@ Access Control module
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 from enum import IntEnum
+
 from .errors import SccsException
 
 

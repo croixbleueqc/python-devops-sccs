@@ -18,6 +18,7 @@
 import asyncio
 import logging
 from typing import Any, Callable
+
 from .watcher import Watcher
 
 
@@ -33,14 +34,14 @@ class Scheduler(object):
         self._lock = asyncio.Lock()
 
     async def watch(
-        self,
-        identity: tuple,
-        poll_interval: int,
-        func,
-        filtering: Callable[[Any], bool] = lambda _: True,
-        *args,
-        **kwargs,
-    ):
+            self,
+            identity: tuple,
+            poll_interval: int,
+            func,
+            filtering: Callable[[Any], bool] = lambda _: True,
+            *args,
+            **kwargs,
+            ):
         """
         Run a new task or connect to an existing task
         """

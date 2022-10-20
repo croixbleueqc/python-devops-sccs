@@ -214,7 +214,11 @@ class Provision(object):
                     raise TypeError(f"{field_name} is not a boolean value.")
 
     @staticmethod
-    def _create_initialize_template_command(setup: TemplateSetup, answers: dict, repository_name: str):
+    def _create_initialize_template_command(
+            setup: TemplateSetup,
+            answers: dict,
+            repository_name: str
+            ):
         """Create a command based on answers
 
         Internal function: There is no answers validation as this is expected to be done during prepare_add_repository

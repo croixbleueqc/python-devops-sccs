@@ -103,7 +103,7 @@ class SccsApi(ABC):
     @abstractmethod
     async def open_session(
             self, session_id: int, credentials: Credentials | None = None
-    ) -> StoredSession:
+            ) -> StoredSession:
         """
         Open a session
 
@@ -137,7 +137,7 @@ class SccsApi(ABC):
 
     async def get_stored_session(
             self, session_id: int | None, session: Session | None = None
-    ) -> StoredSession | None:
+            ) -> StoredSession | None:
         raise NotImplementedError()
 
     @abstractmethod
@@ -211,7 +211,7 @@ class SccsApi(ABC):
             repo_definition: dict,
             template: str,
             template_params: dict,
-    ):
+            ):
         """Add a new repository
 
         The main workflow is:
@@ -239,7 +239,7 @@ class SccsApi(ABC):
     @abstractmethod
     async def get_continuous_deployment_config(
             self, session: Session, repository, environments
-    ) -> list[EnvironmentConfig]:
+            ) -> list[EnvironmentConfig]:
         """Get continuous deployment configuration
 
         This is not the real state of the deployment in your "production" environment but the state expected
@@ -258,7 +258,7 @@ class SccsApi(ABC):
     @abstractmethod
     async def get_continuous_deployment_versions_available(
             self, session, repository
-    ) -> list[Available]:
+            ) -> list[Available]:
         """Get continuous deployment versions available
 
         @abstractmethod
@@ -278,7 +278,7 @@ class SccsApi(ABC):
     @abstractmethod
     async def trigger_continuous_deployment(
             self, session: Session, repo_name: str, environment: str, version: str
-    ) -> EnvironmentConfig:
+            ) -> EnvironmentConfig:
         """Trigger a continuous deployment
 
         Args:
@@ -295,7 +295,7 @@ class SccsApi(ABC):
     @abstractmethod
     async def get_continuous_deployment_environments_available(
             self, session, repository
-    ) -> list[EnvironmentConfig]:
+            ) -> list[EnvironmentConfig]:
         """List all environments that can be used to run the application
 
         Args:
@@ -310,7 +310,7 @@ class SccsApi(ABC):
     @abstractmethod
     async def bridge_repository_to_namespace(
             self, session, repository, environment, untrustable
-    ) -> dict:
+            ) -> dict:
         """Bridge repository/environment to a kubernetes namespace
 
         EXPERIMENTAL FEATURE
@@ -419,7 +419,7 @@ class SccsApi(ABC):
             active: bool,
             events: list[WebhookEvent],
             description: str,
-    ):
+            ):
         raise NotImplementedError()
 
     @abstractmethod

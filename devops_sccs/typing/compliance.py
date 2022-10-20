@@ -48,9 +48,9 @@ class Divergence(BaseModel):
             return False
 
         return (
-            self.rule == other.rule
-            and str(self.current) == str(other.current)
-            and str(self.expected) == str(other.expected)
+                self.rule == other.rule
+                and str(self.current) == str(other.current)
+                and str(self.expected) == str(other.expected)
         )
 
 
@@ -67,7 +67,7 @@ class RepositoryDivergence(BaseModel):
         return {
             "name": preload_data[0][0],
             "divergences": preload_data[0][1]["divergences"],
-        }
+            }
 
     def post_dumps(self, raw, dump):
         # Change the structure to move name as the key

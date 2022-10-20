@@ -4,9 +4,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Generic, Literal, Optional, TypeVar
 
-from pydantic.generics import GenericModel
-
 from pydantic import UUID4, AnyHttpUrl, BaseModel, Extra, Field
+from pydantic.generics import GenericModel
 
 
 class BitbucketResource(BaseModel, extra=Extra.allow):
