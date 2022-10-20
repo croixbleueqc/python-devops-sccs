@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from urllib.error import HTTPError
@@ -216,7 +217,7 @@ class BitbucketCloud(SccsApi):
 
     @ats_cache()
     async def get_api_repository(self, session: Cloud, repo_name: str) -> Repository | None:
-        """see plugin.py"""
+        """Returns an unmodified Repository object as returned by the API"""
 
         workspace = await self.api_workspaces(session)
 
@@ -235,7 +236,6 @@ class BitbucketCloud(SccsApi):
             )
 
     @ats_cache(
-        ttl=60.0,
         miss_callback=lambda f: logging.info(f"{f}: fetching..."),
         )
     async def get_continuous_deployment_config(
@@ -252,11 +252,9 @@ class BitbucketCloud(SccsApi):
         if session is None:
             session = self.watcher
 
-        results: list[typing_cd.EnvironmentConfig] = []
-
         repo = await self.get_api_repository(session, repo_name)
         if repo is None:
-            return results
+            return []
 
         def get_deploys_sync():
             deploys = []
@@ -278,14 +276,21 @@ class BitbucketCloud(SccsApi):
 
         deploys = await run_async(get_deploys_sync)
 
+        tasks = []
         for branch, index in deploys:
-            env_config = await self.get_continuous_deployment_config_by_branch(
-                repo_name, repo, branch_name=branch, config=self.cd_environments[index]
+            tasks.append(
+                self.get_continuous_deployment_config_by_branch(
+                    repo_name,
+                    repo,
+                    branch_name=branch,
+                    config=self.cd_environments[index]
+                    )
                 )
-            results.append(env_config[1])
+        # run parallel
+        results = await asyncio.gather(*tasks)
 
         logging.debug(results)
-        return results
+        return [r[1] for r in results]  # return list of EnvironmentConfigs
 
     @ats_cache(
         miss_callback=lambda f: logging.info(f"{f}: fetching..."),
@@ -358,7 +363,7 @@ class BitbucketCloud(SccsApi):
                 cd_environment_config = cd_environment
                 break
         else:
-            utils_cd.trigger_not_supported(repo_name, environment)
+            utils_cd.trigger_not_supported(repo_name, environment)  # raises an exception
 
         # using user session for repo manipulations
         # Check current configuration using the cache. This is ok because the user will see the
@@ -394,7 +399,8 @@ class BitbucketCloud(SccsApi):
         if repo is None:
             raise TriggerCdEnvUnsupported(repo_name, environment)
 
-        branch = cd_environment_config.branch
+        # noinspection PyUnboundLocalVariable
+        branch = cd_environment_config.branch  # code is unreachable if cd_environment_config is None (see above)
 
         if cd_environment_config.trigger.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
@@ -556,21 +562,16 @@ class BitbucketCloud(SccsApi):
         commit_hash = (await run_async(repo.branches.get, branch_name)).hash
         version: str
         if version_file is not None:
-            try:
-                res: bytes | None = await run_async(
-                    repo.get,
-                    path=f"src/{commit_hash}/{version_file}",
-                    not_json_response=True,
-                    )  # type: ignore
-                if res is not None:
-                    version = res.decode("utf-8")
-                else:
-                    raise SccsException(
-                        f"failed to get version from {version_file} for {repository} on {branch_name}"
-                        )
-            except Exception:
+            res: bytes | None = await run_async(
+                repo.get,
+                path=f"src/{commit_hash}/{version_file}",
+                not_json_response=True,
+                )  # type: ignore
+            if res is not None:
+                version = res.decode("utf-8")
+            else:
                 raise SccsException(
-                    f"failed to get version from {version_file} for {repository} on {branch_name}"
+                    f"failed to get version from {version_file} for {repository} on branch {branch_name}"
                     )
         elif config.version.get("git", False):
             version = commit_hash  # basically only the master branch
@@ -598,7 +599,7 @@ class BitbucketCloud(SccsApi):
             branch_name,
             BitbucketCloud.create_continuous_deployment_config_by_branch(
                 repository, version, branch_name, config, pullrequest_link
-                ),
+                )
             )
 
     @ats_cache()
