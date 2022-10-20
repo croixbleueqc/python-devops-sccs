@@ -7,8 +7,8 @@ class From(BaseModel):
     git: str = Field(
         ...,
         regex=r"(^git@bitbucket\.org:croixbleue/[a-zA-Z0-9-_]+\.git$|^https://"
-        r"[w]{0,3}\.?github.com/croixbleueqc/[a-zA-Z0-9-_]+(.git)?$)",
-    )
+              r"[w]{0,3}\.?github.com/croixbleueqc/[a-zA-Z0-9-_]+(.git)?$)",
+        )
     main_branch: str
     other_branches: list[str] = []
 
@@ -22,14 +22,14 @@ class Arg(BaseModel):
     arg: str | dict[str, Any]
 
 
-class Setup(BaseModel):
+class TemplateSetup(BaseModel):
     cmd: list[str] | None
     args: dict[str, Arg] | None
 
 
 class Template(BaseModel):
     from_: From = Field(alias="from")
-    setup: Setup
+    setup: TemplateSetup
 
 
 class WatcherCreds(BaseModel):
@@ -88,45 +88,42 @@ class MainContract(BaseModel):
     template_required: bool
 
 
-class ProjectValue(BaseModel):
+class RepoContractProjectValue(BaseModel):
     name: str
     key: str
 
 
-class Project(BaseModel):
+class RepoContractValue(BaseModel, extra=Extra.allow):
     type: str
     description: str
     required: bool
+
+
+class RepoContractProject(RepoContractValue):
     roleName: str
-    values: list[ProjectValue]
+    values: list[RepoContractProjectValue]
 
 
-class ConfigurationValue(BaseModel):
+class RepoContractConfigValue(BaseModel):
     short: str
     key: str
 
 
-class Configuration(BaseModel):
-    type: str
-    description: str
-    required: bool
+class RepoContractConfig(RepoContractValue):
     default: int
     roleName: str
-    values: list[ConfigurationValue]
+    values: list[RepoContractConfigValue]
 
 
-class Privileges(BaseModel):
-    type: str
-    description: str
-    required: bool
+class RepoContractPrivileges(RepoContractValue):
     roleName: str
-    values: list[ConfigurationValue]
+    values: list[RepoContractConfigValue]
 
 
 class RepositoryContract(BaseModel):
-    project: Project
-    configuration: Configuration
-    privileges: Privileges
+    project: RepoContractProject
+    configuration: RepoContractConfig
+    privileges: RepoContractPrivileges
 
 
 class ProvisionConfig(BaseModel):
