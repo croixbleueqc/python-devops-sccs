@@ -40,7 +40,7 @@ import subprocess
 import pygit2
 
 from .errors import AnswerRequired, AnswerValidatorFailure, AuthorSyntax, SccsException
-from .schemas.config import ProvisionConfig
+from .schemas.config import ProvisionConfig, RepositoryContract, RepoContractConfig, TemplateSetup
 from .utils.aioify import aioify, cleanupCoreAiofy, getCoreAioify
 
 
@@ -74,7 +74,7 @@ class Provision(object):
             if template.setup.args is not None:
                 for arg, cfg in template.setup.args.items():
                     ui[arg] = cfg.dict()
-                    del ui[arg]["arg"]
+                    del ui[arg]["arg"]  # ???
 
             ui_templates[name] = ui
 
@@ -83,27 +83,27 @@ class Provision(object):
     def get_templates(self):
         return self.templates
 
-    def get_add_repository_contract(self):
+    async def get_add_repository_contract(self):
         """Provide all contracts to add a new repository"""
         return {
-            "main": self.main_contract,
-            "repository": self.repository_contract,
+            "main": self.main_contract.dict(),
+            "repository": self.repository_contract.dict(),
             "templates": self.templates_contract_cache,
-        }
+            }
 
-    def prepare_provision(self, repository, template, template_params):
+    def prepare_provision(self, repository_definition: dict, template: str, template_params: dict):
         """Verify and prepare the repository provisioning
 
         Most of the work is to validate that we have valid answers to fulfil the contract.
         Please read the README for more details about what a contract and answers look like.
 
         Args:
-            repository (dict): Answers to a repository contract
+            repository_definition (dict): Answers to a repository contract
             template (str): Template to use
             template_params (dict): Answers to a template contract
         """
         # Verify repository (name, others)
-        repository_name = repository.get("name")
+        repository_name = repository_definition.get("name")
         if repository_name is None:
             raise AnswerRequired("repository name")
 
@@ -112,11 +112,10 @@ class Provision(object):
         if g is None:
             raise AnswerValidatorFailure("repository name", validator)
 
-        # TODO this might be covered by the use of pydantic models... to verify
-        self.validate(self.repository_contract, repository)
+        self.validate(self.repository_contract, repository_definition)
 
         # Verify template (required or not and valid)
-        if self.main_contract.template_required and (template is None or template == ""):
+        if self.main_contract.template_required and not template:
             raise AnswerRequired("template")
 
         init_template_cmd = None
@@ -131,19 +130,19 @@ class Provision(object):
             # Create custom command
             init_template_cmd = self._create_initialize_template_command(
                 self.templates[template].setup, template_params, repository_name
-            )
+                )
 
         # Create storage definition for this new repository
         storage_definition = {
-            "repository": repository,
+            "repository": repository_definition,
             "template": template,
             "template_params": template_params,
-        }
+            }
 
         # return useful content to provision the new repository
         return repository_name, storage_definition, init_template_cmd
 
-    def validate(self, contract, answers):
+    def validate(self, contract: RepositoryContract, repository_definition: dict):
         """Validate answers regarding the contract
 
         Please read the README for more details about what a contract and answers look like.
@@ -187,35 +186,35 @@ class Provision(object):
 
         Args:
             contract (dict): The contract to fulfill
-            answers (dict): Answers to the contract
+            repository_definition (dict): Answers to the contract
         """
-        for line, details in contract.items():
-            value = answers.get(line)
+        for field_name, details in contract:
+            value = repository_definition.get(field_name)
 
             if value is None:
-                if details.get("required", False):
-                    raise AnswerRequired(line)
-                elif details.get("default") is not None:
-                    value = details["default"]
+                if details.required:
+                    raise AnswerRequired(field_name)
+                elif isinstance(details, RepoContractConfig):
+                    value = details.default
                 else:
                     continue
 
-            details_type = details["type"]
-            validator = details.get("validator")
+            validator = details.dict().get("validator")
 
             if validator:
                 g = re.match(validator, value)
                 if g is None:
-                    raise AnswerValidatorFailure(line, validator)
+                    raise AnswerValidatorFailure(field_name, validator)
 
-            if details_type == "suggestion":
-                if value not in details["values"]:
+            if details.type == "suggestion":
+                if value not in details.values:
                     raise ValueError(f"{value} is unavailable in the suggestion list")
-            elif details_type == "bool":
+            elif details.type == "bool":
                 if not isinstance(value, bool) and not isinstance(value, str):
-                    raise TypeError(f"{line} is not a boolean value.")
+                    raise TypeError(f"{field_name} is not a boolean value.")
 
-    def _create_initialize_template_command(self, setup, answers, repository_name):
+    @staticmethod
+    def _create_initialize_template_command(setup: TemplateSetup, answers: dict, repository_name: str):
         """Create a command based on answers
 
         Internal function: There is no answers validation as this is expected to be done during prepare_add_repository
@@ -266,27 +265,27 @@ class Provision(object):
         # Create the main command part.
         # We are trying to substitute repository_name that is the only variable supported for now
         cmd = []
-        setup_cmd = setup.get("cmd") or []
+        setup_cmd = setup.cmd or []
         for i in setup_cmd:
             cmd.append(i.format(repository_name=repository_name))
 
         if len(cmd) == 0:
             return None
 
-        args = setup.get("args") or {}
+        args = setup.args or {}
         for arg, cfg in args.items():
             value = answers.get(arg)
 
             if value is None:
-                if cfg.get("default") is not None:
-                    value = cfg["default"]
+                if cfg.default is not None:
+                    value = cfg.default
                 else:
                     continue
 
-            cfg_type = cfg["type"]
+            cfg_type = cfg.type
 
             if cfg_type in ("string", "suggestion"):
-                cmd.append(cfg["arg"].format(value))
+                cmd.append(cfg.arg.format(value))
             elif cfg_type == "bool":
                 if isinstance(value, bool):
                     new_value = "true" if value else "false"
@@ -295,23 +294,23 @@ class Provision(object):
                 else:
                     raise TypeError(f"Argument {arg} is not a boolean value.")
 
-                if cfg["arg"].get(new_value) is not None:
-                    cmd.append(cfg["arg"][new_value])
+                if cfg.arg.get(new_value) is not None:
+                    cmd.append(cfg.arg.get(new_value))
 
         return cmd
 
     @aioify(pool=POOL)
     def provision(
-        self,
-        destination,
-        destination_main_branch,
-        additional_branches_mapping,
-        template,
-        initialize_template_command,
-        git_credential,
-        author=None,
-        commit_message="Scaffold initialized !",
-    ):
+            self,
+            destination,
+            destination_main_branch,
+            additional_branches_mapping,
+            template,
+            initialize_template_command,
+            git_credential,
+            author=None,
+            commit_message="Scaffold initialized !",
+            ):
         """Provision a newly created repository in your sccs
 
         Workflow:
@@ -342,7 +341,7 @@ class Provision(object):
 
         # User how_to (common steps)
         user_clone = destination
-        user_path = user_clone[user_clone.rfind("/") + 1 : len(user_clone) - 4]
+        user_path = user_clone[user_clone.rfind("/") + 1: len(user_clone) - 4]
         use_me = f"git clone {user_clone}\n"
         use_me += f"cd {user_path}\n"
 
@@ -358,7 +357,7 @@ class Provision(object):
 
         checkout_path = os.path.join(
             self.checkout_base_path, "".join(random.choices(string.ascii_letters, k=32))
-        )
+            )
 
         # Git part
         # see: https://github.com/MichaelBoselowitz/pygit2-examples/blob/master/examples.py
@@ -378,7 +377,7 @@ class Provision(object):
         remote_template.fetch(callbacks=callbacks)
         tpl_oid = intermediate.lookup_reference(
             f"refs/remotes/template/{template_from_main_branch}"
-        ).target
+            ).target
 
         # Git create branch based on template and checkout
         logging.debug(f"{destination}: creating main branch '{destination_main_branch}'")
@@ -416,7 +415,7 @@ class Provision(object):
                 commit_message,
                 tree,
                 [intermediate.head.target],
-            )
+                )
 
         # additional branches
         logging.debug(f"{destination}: adding additional branches")
@@ -429,12 +428,12 @@ class Provision(object):
             if template_branch not in template_from_other_branches:
                 logging.warning(
                     f"{destination}: branch {template_branch} is not available for {template}"
-                )
+                    )
                 continue
 
             tpl_oid = intermediate.lookup_reference(
                 f"refs/remotes/template/{template_branch}"
-            ).target
+                ).target
             commit = intermediate.get(tpl_oid)
             if not commit:
                 raise SccsException(f"{destination}: commit not found")
