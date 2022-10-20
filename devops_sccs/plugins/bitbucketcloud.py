@@ -563,7 +563,7 @@ class BitbucketCloud(SccsApi):
                     not_json_response=True,
                     )  # type: ignore
                 if res is not None:
-                    version = res.decode("utf-8")
+                    version = res.decode("utf-8").strip()
                 else:
                     raise SccsException(
                         f"failed to get version from {version_file} for {repository} on {branch_name}"
