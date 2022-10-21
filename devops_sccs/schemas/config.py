@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, Extra
+from pydantic import BaseModel, Field, Extra, EmailStr
 
 
 class From(BaseModel):
@@ -35,6 +35,7 @@ class Template(BaseModel):
 class WatcherCreds(BaseModel):
     user: str
     pwd: str
+    email: EmailStr | None = None
 
 
 class Environment(BaseModel):
