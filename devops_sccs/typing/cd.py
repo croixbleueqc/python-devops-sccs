@@ -42,10 +42,10 @@ class EnvironmentConfig(WatcherType):
             return False
 
         return (
-            self.environment == other.environment
-            and self.version == other.version
-            and self.readonly == other.readonly
-            and self.pullrequest == other.pullrequest
+                self.environment == other.environment
+                and self.version == other.version
+                and self.readonly == other.readonly
+                and self.pullrequest == other.pullrequest
         )
 
     def __hash__(self):

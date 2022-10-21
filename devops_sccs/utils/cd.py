@@ -24,17 +24,17 @@ from ..errors import (
     TriggerCdEnvUnsupported,
     TriggerCdVersionUnsupported,
     TriggerCdVersionAlreadyDeployed,
-)
+    )
 from ..typing.cd import EnvironmentConfig, Available
 
 
 def trigger_prepare(
-    continuous_deployment: EnvironmentConfig,
-    versions_available: list[Available],
-    repository: str,
-    environment: str,
-    version: str,
-):
+        continuous_deployment: EnvironmentConfig,
+        versions_available: list[Available],
+        repository: str,
+        environment: str,
+        version: str,
+        ):
     """
     Check conformity to trigger a deployment
     Extract involved configurations from the global config

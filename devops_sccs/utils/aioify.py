@@ -17,8 +17,8 @@
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
-from functools import wraps, partial
 from concurrent.futures import ThreadPoolExecutor
+from functools import wraps, partial
 from typing import Callable, TypeVar
 
 _coreaioify = None
@@ -65,13 +65,13 @@ class CoreAioify(object):
         self.executor_pools = {}
 
     def create_thread_pool(
-        self,
-        pool_name,
-        max_workers=None,
-        thread_name_prefix="",
-        initializer=None,
-        initargs=(),
-    ):
+            self,
+            pool_name,
+            max_workers=None,
+            thread_name_prefix="",
+            initializer=None,
+            initargs=(),
+            ):
         if self.executor_pools.get(pool_name, False):
             raise Exception(f"Pool {pool_name} already exist !")
 
@@ -80,7 +80,7 @@ class CoreAioify(object):
             thread_name_prefix=thread_name_prefix,
             initializer=initializer,
             initargs=initargs,
-        )
+            )
 
     def get_executor(self, pool_name):
         return self.executor_pools[pool_name]
