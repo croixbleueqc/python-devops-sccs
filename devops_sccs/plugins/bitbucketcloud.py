@@ -62,7 +62,7 @@ class BitbucketCloud(SccsApi):
         try:
             self.watcher_user = Credentials(
                 user=config.watcher.user,
-                author="Admin User",
+                author=f"Admin User <{config.watcher.email}>",
                 apikey=config.watcher.pwd,
                 )
             self.watcher = Cloud(
@@ -676,11 +676,12 @@ class BitbucketCloud(SccsApi):
 
     async def get_session_author(self, session: Cloud) -> str:
         stored_session = await self.get_stored_session(None, session)
-        author = ""
         if stored_session is not None:
-            author = stored_session.credentials.author
+            return stored_session.credentials.author
+        elif session.username == self.watcher_user.user:
+            return self.watcher_user.author
 
-        return author
+        return ""
 
 
 register_plugin(PLUGIN_NAME, BitbucketCloud())

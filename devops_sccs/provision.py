@@ -345,7 +345,7 @@ class Provision(object):
 
         # User how_to (common steps)
         user_clone = destination
-        user_path = user_clone[user_clone.rfind("/") + 1: len(user_clone) - 4]
+        user_path = user_clone[user_clone.find("/") + 1: len(user_clone) - 4]
         use_me = f"git clone {user_clone}\n"
         use_me += f"cd {user_path}\n"
 
