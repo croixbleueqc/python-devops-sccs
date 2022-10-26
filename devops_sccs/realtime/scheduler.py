@@ -46,7 +46,6 @@ class Scheduler(object):
         Run a new task or connect to an existing task
         """
         wid = hash(identity)
-        logging.debug(f"wid: {hex(wid)}")
         w: Watcher | None = None
 
         # Protect task creation
@@ -54,7 +53,6 @@ class Scheduler(object):
             w = self.tasks.get(wid)
 
         if w is None:
-            logging.debug(f"scheduler: creating a new watcher for {hex(wid)}")
             w = Watcher(wid, poll_interval, func, *args, **kwargs)
             async with self._lock:
                 self.tasks[wid] = w
@@ -86,7 +84,6 @@ class Scheduler(object):
             # Protect task update
             async with self._lock:
                 if w.is_empty():
-                    logging.debug(f"scheduler: remove watcher {hex(wid)}")
                     self.tasks.pop(wid)
 
     def notify(self, identity: tuple):
@@ -98,5 +95,4 @@ class Scheduler(object):
         w = self.tasks.get(wid)
 
         if w is not None:
-            logging.debug(f"notify {hex(wid)}")
             w.refresh(True)

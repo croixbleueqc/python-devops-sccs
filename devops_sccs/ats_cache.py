@@ -95,7 +95,7 @@ def ats_cache(
                 elif fetch:
                     raise CacheExpired
 
-                logging.debug(f"cache hit for {func.__name__}({args}, {kwargs})")
+                logging.debug(f"CACHE HIT for {func.__name__}({args}, {kwargs})")
 
                 with r_lock:
                     hits += 1
@@ -104,11 +104,11 @@ def ats_cache(
 
             except CacheMiss:
                 miss_callback(func.__name__)
+                logging.debug(f"CACHE MISS for {func.__name__}({args}, {kwargs})")
+
                 result = await func(_self(), *args, **kwargs)
 
                 node = CacheItem(expiry=now() + ttl, value=result)
-
-                logging.debug(f"cache miss for {func.__name__}({args}, {kwargs})")
 
                 with w_lock:
                     # remove oldest cache item if queue is full
@@ -120,18 +120,17 @@ def ats_cache(
                     misses += 1
 
             except CacheExpired:
+                logging.debug(f"CACHE EXPIRED for {func.__name__}({args}, {kwargs})")
+
                 result = await func(_self(), *args, **kwargs)
 
                 node = CacheItem(expiry=now() + ttl, value=result)
-
-                logging.debug(f"cache expired for {func.__name__}({args}, {kwargs})")
 
                 with w_lock:
                     cache[key] = node
                     pq.appendleft(key)
                     misses += 1
 
-            logging.debug(f"cache info for {func.__name__}: {cache_info()}")
             return cache[key].value
 
         def cache_info():

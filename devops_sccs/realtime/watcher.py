@@ -198,10 +198,9 @@ class Watcher(object):
         Start the watcher
         """
         if self.running_task is not None:
-            logging.warning("watcher: already started !")
             return
 
-        logging.info("starting watcher !")
+        logging.info("Starting watcher")
 
         async def async_start():
             watch_task = None
@@ -211,7 +210,7 @@ class Watcher(object):
                 timed_task = asyncio.create_task(self.timed_refresh())
                 await asyncio.gather(watch_task, timed_task)
             except Exception as e:
-                logging.error("watcher: an exception occurred during the polling")
+                logging.error(f"watcher: an exception occurred during the polling: {e}")
                 if watch_task:
                     watch_task.cancel()
                 if timed_task:
@@ -236,13 +235,12 @@ class Watcher(object):
         if self.running_task is None:
             return
 
-        logging.debug("watcher: stopping")
+        logging.debug("Stopping watcher")
 
         self.running_task.cancel()
 
         try:
             await self.running_task
         finally:
-            logging.debug("watcher: stopped")
             self.running_task = None
             self.accepts_queues = True
