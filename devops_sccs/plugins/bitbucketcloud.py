@@ -17,15 +17,16 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from urllib.error import HTTPError
 
 import requests
 from atlassian.bitbucket import Cloud
 from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.bitbucket.cloud.repositories.pipelines import Pipeline
+from atlassian.bitbucket.cloud.repositories.refs import Branch
 from atlassian.bitbucket.cloud.workspaces import Workspace
-from atlassian.errors import ApiNotFoundError
+from atlassian.errors import ApiNotFoundError, ApiPermissionError
 from atlassian.rest_client import AtlassianRestAPI
+from requests import HTTPError
 
 from devops_console.schemas import WebhookEvent
 from devops_sccs.schemas.config import Environment, PluginConfig
@@ -259,17 +260,14 @@ class BitbucketCloud(SccsApi):
         def get_deploys_sync():
             deploys = []
             # Get supported branches
-            for branch in repo.branches.each():
+            for idx, branch_name in enumerate(self.cd_branches_accepted):
                 try:
-                    index = self.cd_branches_accepted.index(branch.name)
-                    if len(environments) == 0 or self.cd_environments[
-                        index].name in environments:  # type: ignore
-                        deploys.append((branch.name, index))
-                except (KeyError, ValueError):
+                    branch = repo.branches.get(branch_name)
+                    if len(environments) == 0 or self.cd_environments[idx].name in environments:
+                        deploys.append((branch, idx))
+                except (KeyError, ValueError, HTTPError):
                     pass
 
-            if len(deploys) == 0:
-                raise SccsException(f"Continuous deployment not supported for {repo_name}")
 
             deploys.sort(key=lambda x: x[1])
 
@@ -277,20 +275,20 @@ class BitbucketCloud(SccsApi):
 
         deploys = await run_async(get_deploys_sync)
 
+        if len(deploys) == 0:
+            logging.warning(f"Continuous deployment not supported for {repo_name}")
+            return []
+
         tasks = []
         for branch, index in deploys:
             tasks.append(
                 self.get_continuous_deployment_config_by_branch(
-                    repo_name,
-                    repo,
-                    branch_name=branch,
-                    config=self.cd_environments[index]
+                    repo_name, repo, branch=branch, config=self.cd_environments[index]
                     )
                 )
         # run parallel
         results = await asyncio.gather(*tasks)
 
-        logging.debug(results)
         return [r[1] for r in results]  # return list of EnvironmentConfigs
 
     @ats_cache(
