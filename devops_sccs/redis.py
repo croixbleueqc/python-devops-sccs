@@ -46,7 +46,7 @@ class RedisCache:
             return
 
         try:
-            redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379')
+            redis_url = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
             self.client = Redis(
                 connection_pool=BlockingConnectionPool.from_url(redis_url),
                 decode_responses=True  # binary data otherwise
