@@ -49,7 +49,7 @@ class RedisCache:
             redis_password = os.environ['REDIS_PASSWORD']
             redis_host = os.environ.get('REDIS_HOST', 'localhost')
 
-            redis_url = f'redis://:{redis_password}@{redis_host}:6379/0'
+            redis_url = f'redis://{redis_password}@{redis_host}:6379/0'
             self.client = Redis(
                 connection_pool=BlockingConnectionPool.from_url(redis_url),
                 decode_responses=True  # binary data otherwise
