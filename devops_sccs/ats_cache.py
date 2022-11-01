@@ -4,7 +4,7 @@ import weakref
 from collections import deque, namedtuple
 from functools import wraps
 from math import inf
-from threading import Lock, RLock
+from multiprocessing import Lock, RLock
 from typing import Callable
 
 
@@ -41,10 +41,7 @@ def makekey(args: tuple, kwargs: dict):
 
 
 def ats_cache(
-        maxsize: int | None = 1000,
-        ttl: float = 3600.0,
-        miss_callback: Callable = lambda _: _,
-        ):
+        maxsize: int | None = 1000, ttl: float = 3600.0, miss_callback: Callable = lambda _: _, ):
     """An asynchronous, thread-safe, TLRU cache. Used to decorate expensive **methods**.
 
     Arguments:
@@ -70,8 +67,8 @@ def ats_cache(
     if ttl <= 0.0:
         ttl = 0.0  # zero caching; always fetching
 
-    r_lock = RLock()  # lock for cache reads
-    w_lock = Lock()  # lock for cache writes
+    r_lock = RLock()  # "recursive" lock for cache reads
+    lock = Lock()  # lock for cache writes
 
     cache: dict = {}
     cache_len = cache.__len__
@@ -83,55 +80,47 @@ def ats_cache(
 
     def wrapper(func):
         async def async_cache(_self, *args, fetch: bool, **kwargs):
-            nonlocal cache, hits, misses
+            nonlocal cache, hits, misses, r_lock, lock, pq
 
             key = makekey(args, kwargs)
 
-            try:
+            with r_lock:
                 if key not in cache:
-                    raise CacheMiss
-                elif ttl != inf and cache[key].expiry < now():
-                    raise CacheExpired
-                elif fetch:
-                    raise CacheExpired
+                    miss_callback(func.__name__)
+                    logging.debug(f"CACHE MISS for {func.__name__}({args}, {kwargs})")
 
-                logging.debug(f"CACHE HIT for {func.__name__}({args}, {kwargs})")
+                    result = await func(_self(), *args, **kwargs)
 
-                with r_lock:
-                    hits += 1
-                    pq.remove(key)
-                    pq.appendleft(key)
+                    node = CacheItem(expiry=now() + ttl, value=result)
 
-            except CacheMiss:
-                miss_callback(func.__name__)
-                logging.debug(f"CACHE MISS for {func.__name__}({args}, {kwargs})")
-
-                result = await func(_self(), *args, **kwargs)
-
-                node = CacheItem(expiry=now() + ttl, value=result)
-
-                with w_lock:
                     # remove oldest cache item if queue is full
                     if len(pq) == maxsize:
                         del cache[pq.pop()]
 
-                    cache[key] = node
+                    with lock:
+                        cache[key] = node
+                        pq.appendleft(key)
+                        misses += 1
+                elif ttl != inf and cache[key].expiry < now() or fetch:
+                    logging.debug(f"CACHE EXPIRED for {func.__name__}({args}, {kwargs})")
+
+                    result = await func(_self(), *args, **kwargs)
+
+                    node = CacheItem(expiry=now() + ttl, value=result)
+
+                    with lock:
+                        cache[key] = node
+                        pq.appendleft(key)
+                        misses += 1
+
+                else:
+                    logging.debug(f"CACHE HIT for {func.__name__}({args}, {kwargs})")
+
+                    hits += 1
+                    pq.remove(key)
                     pq.appendleft(key)
-                    misses += 1
 
-            except CacheExpired:
-                logging.debug(f"CACHE EXPIRED for {func.__name__}({args}, {kwargs})")
-
-                result = await func(_self(), *args, **kwargs)
-
-                node = CacheItem(expiry=now() + ttl, value=result)
-
-                with w_lock:
-                    cache[key] = node
-                    pq.appendleft(key)
-                    misses += 1
-
-            return cache[key].value
+                return cache[key].value
 
         def cache_info():
             """Report cache statistics."""
@@ -140,14 +129,14 @@ def ats_cache(
 
         def cache_clear():
             """Clear the cache, and reset statistics."""
-            with w_lock:
+            with lock:
                 cache.clear()
                 pq.clear()
                 nonlocal hits, misses
                 hits = misses = 0
 
         @wraps(func)
-        async def inner(self, *args, fetch: bool = False, **kwargs):
+        async def inner(self, *args, fetch=False, **kwargs):
             return await async_cache(weakref.ref(self), *args, fetch=fetch, **kwargs)
 
         inner.cache_info = cache_info
