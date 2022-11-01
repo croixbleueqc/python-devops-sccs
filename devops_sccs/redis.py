@@ -46,7 +46,7 @@ class RedisCache:
             return
 
         try:
-            redis_password = os.environ['REDIS_PWD']
+            redis_password = os.environ['REDIS_PASSWORD']
             redis_host = os.environ.get('REDIS_HOST', 'localhost')
 
             redis_url = f'redis://:{redis_password}@{redis_host}:6379/0'
