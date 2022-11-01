@@ -66,7 +66,7 @@ class Context:
             self, repo_name: str, environments: list | None, poll_interval: int, *args, **kwargs, ):
         if environments is None:
             environments = []
-        await self.accesscontrol(repo_name, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
+        # await self.accesscontrol(repo_name, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
 
         def filtering_by_environment(event):
             return not environments or event.value.environment in environments
@@ -92,7 +92,7 @@ class Context:
     async def watch_continuous_deployment_versions_available(
             self, repo_name: str, poll_interval: int, *args, **kwargs
             ):
-        await self.accesscontrol(repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
+        # await self.accesscontrol(repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
 
         return self._client.scheduler.watch(
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repo_name),
@@ -121,9 +121,9 @@ class Context:
     async def watch_continuous_deployment_environments_available(
             self, repo_name, poll_interval: int, *args, **kwargs
             ):
-        await self.accesscontrol(
-            repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
-            )
+        # await self.accesscontrol(
+        #     repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
+        #     )
 
         return self._client.scheduler.watch(
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repo_name,),
