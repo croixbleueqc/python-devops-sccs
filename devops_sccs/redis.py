@@ -52,9 +52,11 @@ class RedisCache:
                 decode_responses=True  # binary data otherwise
                 )
             await self.client.initialize()
-            self._is_initialized = True
         except Exception as e:
-            logger.error(f'Error connecting to redis: {e}')
+            logger.critical(f'Error while connecting/initializing: {e}')
+            self.client = None
+
+        self._is_initialized = True
 
     async def set(self, key, value, ttl=timedelta(hours=1)) -> bool:
         if needs_pickling(value):
