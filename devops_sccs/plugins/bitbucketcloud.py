@@ -79,6 +79,13 @@ class BitbucketCloud(SccsApi):
             Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE: Permission.READ_CAPABILITIES,
             }
 
+        try:
+            from devops_sccs.redis import RedisCache
+            c = RedisCache()
+            await c.init()
+        except Exception as e:
+            logging.error(f"Redis is not available: {e}")
+            raise
         logging.info("Initialization complete!")
 
     async def cleanup(self):
