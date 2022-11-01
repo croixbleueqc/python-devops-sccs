@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from datetime import timedelta
 
 import requests
 from atlassian.bitbucket import Cloud
@@ -24,7 +25,7 @@ from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.bitbucket.cloud.repositories.pipelines import Pipeline
 from atlassian.bitbucket.cloud.repositories.refs import Branch
 from atlassian.bitbucket.cloud.workspaces import Workspace
-from atlassian.errors import ApiNotFoundError, ApiPermissionError
+from atlassian.errors import ApiNotFoundError
 from atlassian.rest_client import AtlassianRestAPI
 from requests import HTTPError
 
@@ -36,6 +37,7 @@ from ..client import register_plugin, SccsClient
 from ..errors import SccsException, TriggerCdEnvUnsupported
 from ..plugin import SccsApi, StoredSession
 from ..provision import Provision
+from ..redis import cache
 from ..typing import cd as typing_cd, repositories as typing_repo
 from ..typing.credentials import Credentials
 from ..utils import cd as utils_cd
@@ -220,7 +222,7 @@ class BitbucketCloud(SccsApi):
             super().add_repository, session, provision, repo_definition, template, template_params
             )
 
-    @ats_cache()
+    @cache(ttl=timedelta(hours=2))
     async def get_continuous_deployment_config(
             self, session: Cloud | None, repo_name: str, environments=None, ) -> list[
         typing_cd.EnvironmentConfig]:
@@ -241,12 +243,11 @@ class BitbucketCloud(SccsApi):
             # Get supported branches
             for idx, branch_name in enumerate(self.cd_branches_accepted):
                 try:
-                    branch = repo.branches.get(branch_name)
+                    b = repo.branches.get(branch_name)
                     if len(environments) == 0 or self.cd_environments[idx].name in environments:
-                        deploys.append((branch, idx))
+                        deploys.append((b, idx))
                 except (KeyError, ValueError, HTTPError):
                     pass
-
 
             deploys.sort(key=lambda x: x[1])
 
@@ -498,7 +499,7 @@ class BitbucketCloud(SccsApi):
             pullrequest=pullrequest if trigger_config.get("pullrequest", False) else None, )
         return env
 
-    @ats_cache()
+    @cache(ttl=timedelta(hours=1))
     async def get_continuous_deployment_config_by_branch(
             self, repository: str, repo: Repository, branch: Branch, config: Environment
             ) -> tuple[str, typing_cd.EnvironmentConfig]:
@@ -541,8 +542,8 @@ class BitbucketCloud(SccsApi):
 
             await run_async(pr_sync)
 
-        return (branch, BitbucketCloud.create_continuous_deployment_config_by_branch(
-            repository, version, branch, config, pullrequest_link
+        return (branch.name, BitbucketCloud.create_continuous_deployment_config_by_branch(
+            repository, version, branch.name, config, pullrequest_link
             ))
 
     @ats_cache()
