@@ -32,7 +32,6 @@ from requests import HTTPError
 from devops_console.schemas import WebhookEvent
 from devops_sccs.schemas.config import Environment, PluginConfig
 from ..accesscontrol import Action, Permission
-from ..ats_cache import ats_cache
 from ..client import register_plugin, SccsClient
 from ..errors import SccsException, TriggerCdEnvUnsupported
 from ..plugin import SccsApi, StoredSession
@@ -153,7 +152,7 @@ class BitbucketCloud(SccsApi):
     def __new__(cls):
         return super().__new__(cls)
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def accesscontrol(self, session: Cloud, repo_name: str, action: int):
         """see plugin.py"""
         # will raise an HTTPError if access is forbidden
@@ -169,7 +168,7 @@ class BitbucketCloud(SccsApi):
     async def passthrough(self, session: Cloud, request):
         return await super().passthrough(session, request)
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_repositories(
             self, session: Cloud, ) -> list[typing_repo.Repository]:
         """see plugin.py"""
@@ -190,11 +189,11 @@ class BitbucketCloud(SccsApi):
 
         return await run_async(get_repos_sync)
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def api_workspaces(self, session: Cloud) -> Workspace:
         return await run_async(session.workspaces.get, self.team)
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_repository(self, session: Cloud, repo_name: str) -> typing_repo.Repository | None:
         """see plugin.py"""
         repos = await self.get_repositories(session)
@@ -203,7 +202,7 @@ class BitbucketCloud(SccsApi):
                 return repo
         return None
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_api_repository(self, session: Cloud, repo_name: str) -> Repository | None:
         """Returns an unmodified Repository object as returned by the API"""
 
@@ -273,7 +272,7 @@ class BitbucketCloud(SccsApi):
 
         return [r[1] for r in results]  # return list of EnvironmentConfigs
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_continuous_deployment_versions_available(
             self, session: Cloud | None, repo_name: str
             ) -> list[typing_cd.Available]:
@@ -431,7 +430,7 @@ class BitbucketCloud(SccsApi):
 
         return continuous_deployment
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_continuous_deployment_environments_available(
             self, session: Cloud | None, repo_name
             ) -> list[typing_cd.EnvironmentConfig]:
@@ -550,7 +549,7 @@ class BitbucketCloud(SccsApi):
             repository, version, branch.name, config, pullrequest_link
             ))
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_repository_permission(self, session: Cloud, repo_name: str) -> str | None:
         # get repository permissions for user
         try:
@@ -568,12 +567,12 @@ class BitbucketCloud(SccsApi):
             logging.warning(f"Error getting repository permissions: {e}")
             return None
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_projects(self, session: Cloud):
         """Return a list of projects"""
         return await run_async(session.get, f"/2.0/workspaces/{self.team}/projects")
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_webhook_subscriptions(self, session: Cloud, repo_name: str):
         repo = await self.get_api_repository(session, repo_name)
         if repo is None:
