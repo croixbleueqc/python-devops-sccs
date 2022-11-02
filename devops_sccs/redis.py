@@ -6,20 +6,22 @@ from datetime import timedelta
 from typing import Any, Callable
 
 from loguru import logger
-from pydantic import BaseModel
 from redis.asyncio import Redis
 from redis.asyncio.connection import BlockingConnectionPool  # will block and wait rather than raise an exception if a client tries to connect and the pool is full
 
 
 def needs_pickling(v):
+    if isinstance(v, (str, int, float)):
+        return False
+    return True
     # pydantic models
-    if issubclass(type(v), BaseModel):
-        return True
-    # recursive types (could contain pydantic models)
-    # todo: probably better to check if the subtypes are pydantic models, but we don't pickle a lot of data so this is fine for now
-    if isinstance(v, (list, tuple, dict)):
-        return True
-    return False
+    # if issubclass(type(v), BaseModel):
+    #     return True
+    # # recursive types (could contain pydantic models)
+    # # todo: probably better to check if the subtypes are pydantic models, but we don't pickle a lot of data so this is fine for now
+    # if isinstance(v, (list, tuple, dict)):
+    #     return True
+    # return False
 
 
 def needs_unpickling(v):
