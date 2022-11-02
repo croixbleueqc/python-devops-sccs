@@ -3,7 +3,7 @@ import os
 import pickle
 import weakref
 from datetime import timedelta
-from typing import Any
+from typing import Any, Callable
 
 from loguru import logger
 from pydantic import BaseModel
@@ -57,7 +57,7 @@ class RedisCache:
             await self.client.initialize()
             await self.client.ping()  # test connection
         except Exception as e:
-            logger.critical(f'Unable to talk to Redis: {e}')
+            logger.critical(e)
             self.client = None
             raise e
 
@@ -83,6 +83,10 @@ class RedisCache:
     async def clear(self):
         await self.client.flushall()
 
+    @property
+    def initialized(self):
+        return self._is_initialized
+
 
 def make_cache_key(func_name: str, args: tuple, kwargs: dict):
     return f'{func_name}({args}, {kwargs})'
@@ -99,7 +103,7 @@ def make_cache_key(func_name: str, args: tuple, kwargs: dict):
 
 def cache(
         ttl: timedelta,
-        key: str | None = None,
+        key: str | Callable | None = None,
         prefix: str = "",
         ):
     """Wrapper for caching **method**  results in redis."""
@@ -107,9 +111,20 @@ def cache(
     def _decorator(method):
         async def _async_wrapper(_self, *args, fetch: bool, **kwargs):
             _cache = RedisCache()
-            await _cache.init()
+            if not _cache.initialized:
+                await _cache.init()
 
-            _key = key or make_cache_key(method.__name__, args, kwargs)
+            # key
+            _key = None
+            if key is None:
+                _key = make_cache_key(method.__name__, args, kwargs)
+            elif isinstance(key, str):
+                _key = key
+            elif callable(key):
+                _key = key(*args, **kwargs)
+            if _key is None:
+                raise ValueError('Invalid key')
+
             if prefix:
                 _key = f'{prefix}{_key}'
 

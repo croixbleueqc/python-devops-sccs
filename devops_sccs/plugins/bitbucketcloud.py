@@ -79,13 +79,6 @@ class BitbucketCloud(SccsApi):
             Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE: Permission.READ_CAPABILITIES,
             }
 
-        try:
-            from devops_sccs.redis import RedisCache
-            c = RedisCache()
-            await c.init()
-        except Exception as e:
-            logging.error(f"Redis is not available: {e}")
-            raise
         logging.info("Initialization complete!")
 
     async def cleanup(self):
@@ -229,7 +222,9 @@ class BitbucketCloud(SccsApi):
             super().add_repository, session, provision, repo_definition, template, template_params
             )
 
-    @cache(ttl=timedelta(hours=2))
+    @cache(
+        ttl=timedelta(days=1),
+        )
     async def get_continuous_deployment_config(
             self, session: Cloud | None, repo_name: str, environments=None, ) -> list[
         typing_cd.EnvironmentConfig]:
@@ -506,7 +501,9 @@ class BitbucketCloud(SccsApi):
             pullrequest=pullrequest if trigger_config.get("pullrequest", False) else None, )
         return env
 
-    @cache(ttl=timedelta(hours=1))
+    @cache(
+        ttl=timedelta(days=1),
+        )
     async def get_continuous_deployment_config_by_branch(
             self, repository: str, repo: Repository, branch: Branch, config: Environment
             ) -> tuple[str, typing_cd.EnvironmentConfig]:
