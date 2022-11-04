@@ -1,3 +1,4 @@
+import json
 from typing import Callable
 
 
@@ -62,17 +63,26 @@ class CacheKeyFn:
         return self(*key_args, **key_kwargs)
 
     @staticmethod
-    def make_default_key(name: str, args: tuple, kwargs: dict):
+    def make_default_key(name: str, *args: tuple, **kwargs: dict):
         key = name
 
         hasargs = len(args) > 0 or len(kwargs) > 0
 
+        def stringify(v) -> str:
+            if isinstance(v, str):
+                return v
+            elif isinstance(v, (int, float, complex, bytes, bool)):
+                return str(v)
+            else:
+                try:
+                    return json.dumps(v)
+                except TypeError:
+                    return str(v).replace('\n', '')  # remove newlines to not clutter logs
+
         if hasargs:
             key += '('
-            if len(args) > 0:
-                key += ', '.join([str(a) for a in args])
-            if len(kwargs) > 0:
-                key += ', '.join([f"{k}={v}" for k, v in kwargs.items()])
+            key += ', '.join([stringify(a) for a in args])
+            key += ', '.join([f'{k}={stringify(v)}' for k, v in kwargs.items()])
             key += ')'
 
         return key

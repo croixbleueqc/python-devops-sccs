@@ -98,7 +98,7 @@ class RedisCache:
 
     async def delete_namespace(self, namespace) -> int:
         n = 0
-        for key in await self.client.scan_iter(f"{namespace}*"):
+        async for key in self.client.scan_iter(f"{namespace}*"):
             n += await self.delete(key)
         return n
 
@@ -134,7 +134,7 @@ def cache(
             # key
             _key = None
             if key is None:
-                _key = CacheKeyFn.make_default_key(method.__name__, args, kwargs)
+                _key = CacheKeyFn.make_default_key(method.__name__, *args, **kwargs)
             elif isinstance(key, str):
                 _key = key
             elif isinstance(key, CacheKeyFn):

@@ -75,7 +75,7 @@ class Watcher(object):
     def refresh(self, bypass_cache: bool = False):
         """
         Force a refresh (notify the watch to refresh as soon as possible); and optionally bypass the
-        function's cache (ats_cache)
+        function's cache
         """
         self.bypass_func_cache = bypass_cache
         self.poll_event.set()
