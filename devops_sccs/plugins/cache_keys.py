@@ -1,7 +1,5 @@
 from typing import Callable
 
-from devops_sccs.plugins.bitbucketcloud import BitbucketCloud
-
 
 class CacheKeyFn:
     """Functions to return cache keys based on the arguments passed to the functions found
@@ -29,17 +27,7 @@ class CacheKeyFn:
         return cls(fn.__name__, arg_names, kwarg_names)
 
     def __call__(self, *args, **kwargs):
-        key = self.name
-
-        hasargs = len(args) > 0 or len(kwargs) > 0
-
-        if hasargs:
-            key += '('
-            if len(args) > 0:
-                key += ', '.join([str(a) for a in args])
-            if len(kwargs) > 0:
-                key += ', '.join([f"{k}={v}" for k, v in kwargs.items()])
-            key += ')'
+        key = CacheKeyFn.make_default_key(self.name, *args, **kwargs)
 
         if self.namespace is not None:
             key = CacheKeyFn.prepend_namespace(self.namespace, key)
@@ -74,13 +62,29 @@ class CacheKeyFn:
         return self(*key_args, **key_kwargs)
 
     @staticmethod
+    def make_default_key(name: str, args: tuple, kwargs: dict):
+        key = name
+
+        hasargs = len(args) > 0 or len(kwargs) > 0
+
+        if hasargs:
+            key += '('
+            if len(args) > 0:
+                key += ', '.join([str(a) for a in args])
+            if len(kwargs) > 0:
+                key += ', '.join([f"{k}={v}" for k, v in kwargs.items()])
+            key += ')'
+
+        return key
+
+    @staticmethod
     def prepend_namespace(namespace: str, key: str):
         return f"{namespace}::{key}"
 
 
 cache_key_fns = {
-    "get_continuous_deployment_config": CacheKeyFn.from_fn(
-        BitbucketCloud.get_continuous_deployment_config,
+    "get_continuous_deployment_config": CacheKeyFn(
+        "get_continuous_deployment_config",
         ["repo_name"]
         )
     }

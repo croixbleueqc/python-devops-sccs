@@ -109,19 +109,6 @@ class RedisCache:
     def initialized(self):
         return self._is_initialized
 
-    @staticmethod
-    def make_cache_key(func_name: str, args: tuple, kwargs: dict):
-        return f'{func_name}({args}, {kwargs})'
-        # key = args
-        # if kwargs:
-        #     for item in kwargs.items():
-        #         key += item
-        # try:
-        #     hash_value = hash(key)
-        # except TypeError:
-        #     return str(key)  # for unhashable types (eg. dicts), just return the value of __str__()
-        # return hash_value
-
 
 def cache(
         ttl: timedelta,
@@ -147,7 +134,7 @@ def cache(
             # key
             _key = None
             if key is None:
-                _key = RedisCache.make_cache_key(method.__name__, args, kwargs)
+                _key = CacheKeyFn.make_default_key(method.__name__, args, kwargs)
             elif isinstance(key, str):
                 _key = key
             elif isinstance(key, CacheKeyFn):
