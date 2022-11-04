@@ -8,7 +8,13 @@ class CacheKeyFn:
     in SccsApi (or in a plugin).
     If a method is in SccsApi, but not here, it probably doesn't need a cache key function"""
 
-    def __init__(self, name: str, arg_names=None, kwarg_names=None):
+    def __init__(
+            self,
+            name: str,
+            arg_names: list[str] = None,
+            kwarg_names: list[str] = None,
+            namespace: str = None,
+            ):
         if arg_names is None:
             arg_names = []
         if kwarg_names is None:
@@ -16,9 +22,10 @@ class CacheKeyFn:
         self.name = name
         self.arg_names = arg_names
         self.kwarg_names = kwarg_names
+        self.namespace = namespace
 
     @classmethod
-    def from_fn(cls, fn, arg_names: list[str], kwarg_names: list[str]):
+    def from_fn(cls, fn, arg_names: list[str], kwarg_names: list[str], namespace: str = None):
         return cls(fn.__name__, arg_names, kwarg_names)
 
     def __call__(self, *args, **kwargs):
@@ -33,6 +40,9 @@ class CacheKeyFn:
             if len(kwargs) > 0:
                 key += ', '.join([f"{k}={v}" for k, v in kwargs.items()])
             key += ')'
+
+        if self.namespace is not None:
+            key = CacheKeyFn.prepend_namespace(self.namespace, key)
 
         return key
 
@@ -62,6 +72,10 @@ class CacheKeyFn:
         key_kwargs = {arg: kwargs[arg] for arg in kwargs if arg in self.kwarg_names}
 
         return self(*key_args, **key_kwargs)
+
+    @staticmethod
+    def prepend_namespace(namespace: str, key: str):
+        return f"{namespace}::{key}"
 
 
 cache_key_fns = {

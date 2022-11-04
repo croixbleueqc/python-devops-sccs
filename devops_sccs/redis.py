@@ -96,6 +96,12 @@ class RedisCache:
     async def delete(self, *keys) -> int:
         return await self.client.delete(*keys)
 
+    async def delete_namespace(self, namespace) -> int:
+        n = 0
+        for key in await self.client.scan_iter(f"{namespace}*"):
+            n += await self.delete(key)
+        return n
+
     async def clear(self):
         await self.client.flushall()
 
@@ -120,7 +126,7 @@ class RedisCache:
 def cache(
         ttl: timedelta,
         key: str | CacheKeyFn | None = None,
-        prefix: str = "",
+        namespace: str = "",
         ):
     """Wrapper for caching **method**  results in redis.
 
@@ -128,7 +134,7 @@ def cache(
         ttl: time to live for the cached value
         key: key to use for the cache. Can be an static string, a function or None. In the case of
         a function, it is expected to have some, or all of the same arguments as the wrapped method.
-        prefix: prefix to use for the cache key. Useful for differentiating between different
+        namespace: prefix to use for the cache key. Useful for differentiating between different
         instances of the same class, for example.
     """
 
@@ -149,8 +155,8 @@ def cache(
             if _key is None:
                 raise ValueError('Invalid key')
 
-            if prefix:
-                _key = f'{prefix}:{_key}'
+            if namespace:
+                _key = CacheKeyFn.prepend_namespace(namespace, _key)
 
             if fetch:
                 logger.debug(f'REDIS CACHE: fetch flag set, deleting cached value')
