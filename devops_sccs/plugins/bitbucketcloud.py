@@ -349,7 +349,8 @@ class BitbucketCloud(SccsApi):
         continuous_deployment: typing_cd.EnvironmentConfig
         try:
             continuous_deployment = (await self.get_continuous_deployment_config(
-                session=self.watcher, repo_name=repo_name, environments=[environment], ))[0]
+                self.watcher, repo_name, [environment]
+                ))[0]
         except IndexError:
             logging.warning(
                 f"Continuous deployment config not found for {repo_name} on environment {environment}"

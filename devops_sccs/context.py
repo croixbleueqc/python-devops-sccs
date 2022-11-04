@@ -95,12 +95,12 @@ class Context:
             kwargs=kwargs
             )
 
-    async def trigger_continuous_deployment(self, repository, environment, version):
+    async def trigger_continuous_deployment(self, repo_name, environment, version):
         result = await self.plugin.trigger_continuous_deployment(
-            self.session, repository, environment, version
+            self.session, repo_name, environment, version
             )
 
-        self._client.scheduler.notify((Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repository))
+        self._client.scheduler.notify((Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name))
 
         return result.dict()
 

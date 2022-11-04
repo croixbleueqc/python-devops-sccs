@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Callable
 
 
@@ -40,27 +41,33 @@ class CacheKeyFn:
         Discards unwanted arguments automagically."""
 
         # check that the number of args and kwargs is correct
-        if len(args) < len(self.arg_names) or len(kwargs) < len(self.kwarg_names):
+        if len(args) + len(kwargs) < len(self.arg_names) + len(self.kwarg_names):
             raise ValueError(
                 f"Cache key function '{self.name}' called with too few arguments"
                 )
 
-        # introspect the function signature to see what positional arguments from the original
-        # should be passed to the key function
         original_arg_names = tuple(
             filter(
                 lambda a: a != 'self',
-                fn.__code__.co_varnames[:fn.__code__.co_argcount]
+                fn.__code__.co_varnames
                 )
-            )  # 'self' is not a positional arg
-
-        key_args = tuple(
-            args[i] for i, n in enumerate(original_arg_names) if
-            n in self.arg_names and len(args) > i
             )
-        key_kwargs = {arg: kwargs[arg] for arg in kwargs if arg in self.kwarg_names}
 
-        return self(*key_args, **key_kwargs)
+        # get positional args
+        key_fn_args = ()
+        for i, n in enumerate(original_arg_names):
+            if n in self.arg_names:
+                key_fn_args += (args[i],)
+                # some positional args may have been passed as kwargs
+                if n in kwargs:
+                    key_fn_args += (kwargs[n],)
+                    del kwargs[n]
+
+        # get keyword args
+        key_fn_kwargs = {arg: kwargs[arg] for arg in kwargs if
+                         arg in self.kwarg_names}
+
+        return self(*key_fn_args, **key_fn_kwargs)
 
     @staticmethod
     def make_default_key(name: str, *args: tuple, **kwargs: dict):
@@ -77,7 +84,10 @@ class CacheKeyFn:
                 try:
                     return json.dumps(v)
                 except TypeError:
-                    return str(v).replace('\n', '')  # remove newlines to not clutter logs
+                    s = str(v).replace('\n', '')  # remove newlines to not clutter logs
+                    regex = re.compile(r'[\s]{2,}')
+                    s = re.sub(regex, ' ', s)  # replace multiple spaces with a single one
+                    return s
 
         if hasargs:
             key += '('
@@ -95,6 +105,6 @@ class CacheKeyFn:
 cache_key_fns = {
     "get_continuous_deployment_config": CacheKeyFn(
         "get_continuous_deployment_config",
-        ["repo_name"]
+        ["repo_name", "environments"],
         )
     }
