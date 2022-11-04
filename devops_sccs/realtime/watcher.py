@@ -46,9 +46,9 @@ class Watcher(object):
             watcher_id: int,
             poll_interval: int,
             func: Callable,
-            *args,
+            args: tuple,
+            kwargs: dict,
             bypass_func_cache=False,
-            **kwargs
             ):
         # Id
         self.wid = watcher_id

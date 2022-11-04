@@ -3,31 +3,48 @@ import os
 import pickle
 import weakref
 from datetime import timedelta
-from typing import Any, Callable
+from typing import Any
 
+import dill
 from loguru import logger
 from redis.asyncio import Redis
 from redis.asyncio.connection import BlockingConnectionPool  # will block and wait rather than raise an exception if a client tries to connect and the pool is full
 
-
-def needs_pickling(v):
-    if isinstance(v, (str, int, float)):
-        return False
-    return True
-    # pydantic models
-    # if issubclass(type(v), BaseModel):
-    #     return True
-    # # recursive types (could contain pydantic models)
-    # # todo: probably better to check if the subtypes are pydantic models, but we don't pickle a lot of data so this is fine for now
-    # if isinstance(v, (list, tuple, dict)):
-    #     return True
-    # return False
+from devops_sccs.plugins.cache_keys import CacheKeyFn
 
 
-def needs_unpickling(v):
-    if isinstance(v, bytes):
+class Serializer:
+    @staticmethod
+    def needs_pickling(v):
+        if isinstance(v, (str, int, float)):
+            return False
         return True
-    return False
+
+    @staticmethod
+    def needs_unpickling(v):
+        if isinstance(v, bytes):
+            return True
+        return False
+
+    @staticmethod
+    def serialize(value: Any) -> bytes:
+        serialized = value
+        if Serializer.needs_pickling(value):
+            try:
+                serialized = pickle.dumps(value)
+            except AttributeError:
+                serialized = dill.dumps(value)  # slower than pickle, but can handle more types
+        return serialized
+
+    @staticmethod
+    def deserialize(value) -> Any:
+        deserialized = value
+        if Serializer.needs_unpickling(value):
+            try:
+                deserialized = pickle.loads(value)
+            except (pickle.UnpicklingError, AttributeError):
+                deserialized = dill.loads(value)
+        return deserialized
 
 
 class RedisCache:
@@ -66,15 +83,12 @@ class RedisCache:
         self._is_initialized = True
 
     async def set(self, key, value, ttl=timedelta(hours=1)) -> bool:
-        if needs_pickling(value):
-            value = pickle.dumps(value)
+        value = Serializer.serialize(value)
         return await self.client.set(key, value, ex=ttl)
 
     async def get(self, key) -> Any:
         value = await self.client.get(key)
-        if needs_unpickling(value):
-            return pickle.loads(value)
-        return value
+        return Serializer.deserialize(value)
 
     async def exists(self, key) -> bool:
         return await self.client.exists(key)
@@ -89,26 +103,34 @@ class RedisCache:
     def initialized(self):
         return self._is_initialized
 
-
-def make_cache_key(func_name: str, args: tuple, kwargs: dict):
-    return f'{func_name}({args}, {kwargs})'
-    # key = args
-    # if kwargs:
-    #     for item in kwargs.items():
-    #         key += item
-    # try:
-    #     hash_value = hash(key)
-    # except TypeError:
-    #     return str(key)  # for unhashable types (eg. dicts), just return the value of __str__()
-    # return hash_value
+    @staticmethod
+    def make_cache_key(func_name: str, args: tuple, kwargs: dict):
+        return f'{func_name}({args}, {kwargs})'
+        # key = args
+        # if kwargs:
+        #     for item in kwargs.items():
+        #         key += item
+        # try:
+        #     hash_value = hash(key)
+        # except TypeError:
+        #     return str(key)  # for unhashable types (eg. dicts), just return the value of __str__()
+        # return hash_value
 
 
 def cache(
         ttl: timedelta,
-        key: str | Callable | None = None,
+        key: str | CacheKeyFn | None = None,
         prefix: str = "",
         ):
-    """Wrapper for caching **method**  results in redis."""
+    """Wrapper for caching **method**  results in redis.
+
+    Args:
+        ttl: time to live for the cached value
+        key: key to use for the cache. Can be an static string, a function or None. In the case of
+        a function, it is expected to have some, or all of the same arguments as the wrapped method.
+        prefix: prefix to use for the cache key. Useful for differentiating between different
+        instances of the same class, for example.
+    """
 
     def _decorator(method):
         async def _async_wrapper(_self, *args, fetch: bool, **kwargs):
@@ -119,16 +141,16 @@ def cache(
             # key
             _key = None
             if key is None:
-                _key = make_cache_key(method.__name__, args, kwargs)
+                _key = RedisCache.make_cache_key(method.__name__, args, kwargs)
             elif isinstance(key, str):
                 _key = key
-            elif callable(key):
-                _key = key(*args, **kwargs)
+            elif isinstance(key, CacheKeyFn):
+                _key = key.infer_from_orig(method, *args, **kwargs)
             if _key is None:
                 raise ValueError('Invalid key')
 
             if prefix:
-                _key = f'{prefix}{_key}'
+                _key = f'{prefix}:{_key}'
 
             if fetch:
                 logger.debug(f'REDIS CACHE: fetch flag set, deleting cached value')

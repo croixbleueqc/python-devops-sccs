@@ -31,6 +31,7 @@ from requests import HTTPError
 
 from devops_console.schemas import WebhookEvent
 from devops_sccs.schemas.config import Environment, PluginConfig
+from .cache_keys import cache_key_fns
 from ..accesscontrol import Action, Permission
 from ..client import register_plugin, SccsClient
 from ..errors import SccsException, TriggerCdEnvUnsupported
@@ -168,7 +169,7 @@ class BitbucketCloud(SccsApi):
     async def passthrough(self, session: Cloud, request):
         return await super().passthrough(session, request)
 
-    @cache(ttl=timedelta(days=1))
+    @cache(ttl=timedelta(days=1), key="repositories")
     async def get_repositories(
             self, session: Cloud, ) -> list[typing_repo.Repository]:
         """see plugin.py"""
@@ -223,6 +224,7 @@ class BitbucketCloud(SccsApi):
 
     @cache(
         ttl=timedelta(days=1),
+        key=cache_key_fns["get_continuous_deployment_config"],
         )
     async def get_continuous_deployment_config(
             self, session: Cloud | None, repo_name: str, environments=None, ) -> list[
@@ -264,7 +266,9 @@ class BitbucketCloud(SccsApi):
         for branch, index in deploys:
             tasks.append(
                 self.get_continuous_deployment_config_by_branch(
-                    repo_name, repo, branch=branch, config=self.cd_environments[index]
+                    repo,
+                    branch,
+                    self.cd_environments[index]
                     )
                 )
         # run parallel
@@ -274,7 +278,9 @@ class BitbucketCloud(SccsApi):
 
     @cache(ttl=timedelta(days=1))
     async def get_continuous_deployment_versions_available(
-            self, session: Cloud | None, repo_name: str
+            self,
+            session: Cloud | None,
+            repo_name: str
             ) -> list[typing_cd.Available]:
         """
         Get the list of version available to deploy
@@ -447,7 +453,10 @@ class BitbucketCloud(SccsApi):
             try:
                 branch = await run_async(repo.branches.get, environment.branch)
                 (_, cfg) = await self.get_continuous_deployment_config_by_branch(
-                    repo_name, repo=repo, branch=branch, config=environment, )
+                    repo,
+                    branch,
+                    environment
+                    )
             except Exception:
                 continue
             envs.append(cfg)
@@ -501,10 +510,11 @@ class BitbucketCloud(SccsApi):
         return env
 
     @cache(
-        ttl=timedelta(days=1),
+        ttl=timedelta(days=1)
+
         )
     async def get_continuous_deployment_config_by_branch(
-            self, repository: str, repo: Repository, branch: Branch, config: Environment
+            self, repo: Repository, branch: Branch, config: Environment
             ) -> tuple[str, typing_cd.EnvironmentConfig]:
         """
         Get environment configuration for a specific branch
@@ -522,7 +532,7 @@ class BitbucketCloud(SccsApi):
                 version = res.decode("utf-8").strip()
             else:
                 raise SccsException(
-                    f"failed to get version from {version_file} for {repository} on branch {branch}"
+                    f"failed to get version from {version_file} for {repo.name} on branch {branch}"
                     )
         elif config.version.get("git", False):
             version = commit_hash  # basically only the master branch
@@ -546,7 +556,7 @@ class BitbucketCloud(SccsApi):
             await run_async(pr_sync)
 
         return (branch.name, BitbucketCloud.create_continuous_deployment_config_by_branch(
-            repository, version, branch.name, config, pullrequest_link
+            repo.name, version, branch.name, config, pullrequest_link
             ))
 
     @cache(ttl=timedelta(days=1))

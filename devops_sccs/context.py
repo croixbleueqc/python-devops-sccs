@@ -15,7 +15,6 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from .accesscontrol import Action
 from .plugin import SccsApi
 
 
@@ -53,36 +52,30 @@ class Context:
             (Context.UUID_WATCH_REPOSITORIES, self.session_id),
             poll_interval,
             self.plugin.get_repositories,
-            session=self.session,
-            *args,
-            **kwargs, )
+            args=(self.session, *args),
+            kwargs=kwargs
+            )
 
-    async def get_continuous_deployment_config(self, repo_name, environments=[]):
+    async def get_continuous_deployment_config(self, repo_name, environments=None):
+        if environments is None:
+            environments = []
         return await self.plugin.get_continuous_deployment_config(
             self.session, repo_name, environments
             )
 
     async def watch_continuous_deployment_config(
-            self, repo_name: str, environments: list | None, poll_interval: int, *args, **kwargs, ):
-        if environments is None:
-            environments = []
+            self, poll_interval: int, repo_name: str, environments: list, kwargs: dict,
+            ):
         # await self.accesscontrol(repo_name, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
-
-        def filtering_by_environment(event):
-            return not environments or event.value.environment in environments
 
         return self._client.scheduler.watch(
             (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name),
             poll_interval,
             self.plugin.get_continuous_deployment_config,
-            filtering=filtering_by_environment,
-            session=None,
-            # Shared session, ie admin session
-            repo_name=repo_name,
-            environments=environments,
-            bypass_func_cache=False,
-            *args,
-            **kwargs, )
+            args=(None, repo_name, environments),
+            kwargs=kwargs,
+            event_filter=lambda e: not environments or e.value.environment in environments,
+            )
 
     async def get_continuous_deployment_versions_available(self, repository):
         return await self.plugin.get_continuous_deployment_versions_available(
@@ -98,11 +91,9 @@ class Context:
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repo_name),
             poll_interval,
             self.plugin.get_continuous_deployment_versions_available,
-            session=None,
-            # Shared session, ie admin session
-            repo_name=repo_name,
-            *args,
-            **kwargs, )
+            args=(None, repo_name, *args),
+            kwargs=kwargs
+            )
 
     async def trigger_continuous_deployment(self, repository, environment, version):
         result = await self.plugin.trigger_continuous_deployment(
@@ -129,11 +120,9 @@ class Context:
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repo_name,),
             poll_interval,
             self.plugin.get_continuous_deployment_environments_available,
-            session=None,
-            # Shared session, ie admin session
-            repo_name=repo_name,
-            *args,
-            **kwargs, )
+            args=(None, repo_name, *args,),
+            kwargs=kwargs
+            )
 
     # TODO: remove this method (unused)
     async def bridge_repository_to_namespace(
