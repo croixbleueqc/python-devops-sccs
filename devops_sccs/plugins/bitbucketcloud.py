@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+from datetime import timedelta
 
 import requests
 from atlassian.bitbucket import Cloud
@@ -24,18 +25,18 @@ from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.bitbucket.cloud.repositories.pipelines import Pipeline
 from atlassian.bitbucket.cloud.repositories.refs import Branch
 from atlassian.bitbucket.cloud.workspaces import Workspace
-from atlassian.errors import ApiNotFoundError, ApiPermissionError
 from atlassian.rest_client import AtlassianRestAPI
 from requests import HTTPError
 
 from devops_console.schemas import WebhookEvent
 from devops_sccs.schemas.config import Environment, PluginConfig
+from .cache_keys import cache_key_fns
 from ..accesscontrol import Action, Permission
-from ..ats_cache import ats_cache
 from ..client import register_plugin, SccsClient
 from ..errors import SccsException, TriggerCdEnvUnsupported
 from ..plugin import SccsApi, StoredSession
 from ..provision import Provision
+from ..redis import cache
 from ..typing import cd as typing_cd, repositories as typing_repo
 from ..typing.credentials import Credentials
 from ..utils import cd as utils_cd
@@ -151,7 +152,7 @@ class BitbucketCloud(SccsApi):
     def __new__(cls):
         return super().__new__(cls)
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def accesscontrol(self, session: Cloud, repo_name: str, action: int):
         """see plugin.py"""
         # will raise an HTTPError if access is forbidden
@@ -167,7 +168,7 @@ class BitbucketCloud(SccsApi):
     async def passthrough(self, session: Cloud, request):
         return await super().passthrough(session, request)
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1), key="repositories")
     async def get_repositories(
             self, session: Cloud, ) -> list[typing_repo.Repository]:
         """see plugin.py"""
@@ -188,11 +189,11 @@ class BitbucketCloud(SccsApi):
 
         return await run_async(get_repos_sync)
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def api_workspaces(self, session: Cloud) -> Workspace:
         return await run_async(session.workspaces.get, self.team)
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_repository(self, session: Cloud, repo_name: str) -> typing_repo.Repository | None:
         """see plugin.py"""
         repos = await self.get_repositories(session)
@@ -201,7 +202,7 @@ class BitbucketCloud(SccsApi):
                 return repo
         return None
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_api_repository(self, session: Cloud, repo_name: str) -> Repository | None:
         """Returns an unmodified Repository object as returned by the API"""
 
@@ -220,7 +221,10 @@ class BitbucketCloud(SccsApi):
             super().add_repository, session, provision, repo_definition, template, template_params
             )
 
-    @ats_cache()
+    @cache(
+        ttl=timedelta(days=1),
+        key=cache_key_fns["get_continuous_deployment_config"],
+        )
     async def get_continuous_deployment_config(
             self, session: Cloud | None, repo_name: str, environments=None, ) -> list[
         typing_cd.EnvironmentConfig]:
@@ -241,12 +245,11 @@ class BitbucketCloud(SccsApi):
             # Get supported branches
             for idx, branch_name in enumerate(self.cd_branches_accepted):
                 try:
-                    branch = repo.branches.get(branch_name)
+                    b = repo.branches.get(branch_name)
                     if len(environments) == 0 or self.cd_environments[idx].name in environments:
-                        deploys.append((branch, idx))
+                        deploys.append((b, idx))
                 except (KeyError, ValueError, HTTPError):
                     pass
-
 
             deploys.sort(key=lambda x: x[1])
 
@@ -262,7 +265,9 @@ class BitbucketCloud(SccsApi):
         for branch, index in deploys:
             tasks.append(
                 self.get_continuous_deployment_config_by_branch(
-                    repo_name, repo, branch=branch, config=self.cd_environments[index]
+                    repo,
+                    branch,
+                    self.cd_environments[index]
                     )
                 )
         # run parallel
@@ -270,9 +275,11 @@ class BitbucketCloud(SccsApi):
 
         return [r[1] for r in results]  # return list of EnvironmentConfigs
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_continuous_deployment_versions_available(
-            self, session: Cloud | None, repo_name: str
+            self,
+            session: Cloud | None,
+            repo_name: str
             ) -> list[typing_cd.Available]:
         """
         Get the list of version available to deploy
@@ -341,7 +348,8 @@ class BitbucketCloud(SccsApi):
         continuous_deployment: typing_cd.EnvironmentConfig
         try:
             continuous_deployment = (await self.get_continuous_deployment_config(
-                session=self.watcher, repo_name=repo_name, environments=[environment], ))[0]
+                self.watcher, repo_name, [environment], fetch=True
+                ))[0]
         except IndexError:
             logging.warning(
                 f"Continuous deployment config not found for {repo_name} on environment {environment}"
@@ -353,7 +361,7 @@ class BitbucketCloud(SccsApi):
             )
 
         versions_available = await self.get_continuous_deployment_versions_available(
-            self.watcher, repo_name
+            self.watcher, repo_name, fetch=True
             )
 
         utils_cd.trigger_prepare(
@@ -365,7 +373,9 @@ class BitbucketCloud(SccsApi):
             raise TriggerCdEnvUnsupported(repo_name, environment)
 
         # noinspection PyUnboundLocalVariable
-        branch = cd_environment_config.branch  # code is unreachable if cd_environment_config is None (see above)
+        branch_name = cd_environment_config.branch  # code is unreachable if cd_environment_config is None (see above)
+
+        deploy_branch_name = f"continuous-deployment-{environment}"
 
         if cd_environment_config.trigger.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
@@ -373,23 +383,21 @@ class BitbucketCloud(SccsApi):
             def check_pr_sync():
                 for pullrequest in repo.pullrequests.each():
                     if (
-                            pullrequest.destination_branch == branch and pullrequest.title is not None and self.cd_pullrequest_tag in pullrequest.title):
-                        link = pullrequest.get_link("html")
+                            pullrequest.destination_branch == branch_name and pullrequest.title is not None and self.cd_pullrequest_tag in pullrequest.title):
                         raise SccsException(
-                            f"A continuous deployment request is already open. link: {link['href'] if link else None}"
+                            f'A continuous deployment request is already open. link: {pullrequest.get_link("html")}'
                             )
 
             await run_async(check_pr_sync)
 
-            deploy_branch = await run_async(repo.branches.get, name=branch)
+            deploy_branch = await run_async(repo.branches.get, branch_name)
 
-            deploy_branch.name = f"continuous-deployment-{environment}"
             try:
                 # If the branch already exists, we should remove it.
-                await run_async(repo.branches.delete, path=f"{deploy_branch.name}")
-            except ApiNotFoundError:
+                await run_async(repo.branches.delete, path=f"{deploy_branch_name}")
+            except HTTPError:
                 pass
-            await run_async(deploy_branch.create)
+            await run_async(repo.branches.create, deploy_branch_name, deploy_branch.hash)
         else:
             deploy_branch = None
 
@@ -402,7 +410,7 @@ class BitbucketCloud(SccsApi):
                 f'/{cd_environment_config.version["file"]}': f"{version}\n",
                 "message": f"deploy version {version}",
                 "author": author,
-                "branch": branch if deploy_branch is None else deploy_branch.name,
+                "branch": branch_name if deploy_branch is None else deploy_branch_name,
                 }, auth=(session.username, session.password),  # type: ignore
             )
 
@@ -411,13 +419,13 @@ class BitbucketCloud(SccsApi):
             pr = await run_async(
                 repo.pullrequests.create,
                 title=f"Ugrade {environment} {self.cd_pullrequest_tag}",
-                source_branch=deploy_branch.name,
-                destination_branch=branch,
-                close_source_branch=True, )
+                source_branch=deploy_branch_name,
+                destination_branch=branch_name,
+                close_source_branch=True
+                )
 
             # race condition start here
-            link = pr.get_link("html")
-            continuous_deployment.pullrequest = link["href"] if link else None
+            continuous_deployment.pullrequest = pr.get_link("html")
         else:
             # Continuous Deployment done
             continuous_deployment.version = version
@@ -428,7 +436,7 @@ class BitbucketCloud(SccsApi):
 
         return continuous_deployment
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_continuous_deployment_environments_available(
             self, session: Cloud | None, repo_name
             ) -> list[typing_cd.EnvironmentConfig]:
@@ -445,7 +453,10 @@ class BitbucketCloud(SccsApi):
             try:
                 branch = await run_async(repo.branches.get, environment.branch)
                 (_, cfg) = await self.get_continuous_deployment_config_by_branch(
-                    repo_name, repo=repo, branch=branch, config=environment, )
+                    repo,
+                    branch,
+                    environment
+                    )
             except Exception:
                 continue
             envs.append(cfg)
@@ -498,9 +509,12 @@ class BitbucketCloud(SccsApi):
             pullrequest=pullrequest if trigger_config.get("pullrequest", False) else None, )
         return env
 
-    @ats_cache()
+    @cache(
+        ttl=timedelta(days=1)
+
+        )
     async def get_continuous_deployment_config_by_branch(
-            self, repository: str, repo: Repository, branch: Branch, config: Environment
+            self, repo: Repository, branch: Branch, config: Environment
             ) -> tuple[str, typing_cd.EnvironmentConfig]:
         """
         Get environment configuration for a specific branch
@@ -518,7 +532,7 @@ class BitbucketCloud(SccsApi):
                 version = res.decode("utf-8").strip()
             else:
                 raise SccsException(
-                    f"failed to get version from {version_file} for {repository} on branch {branch}"
+                    f"failed to get version from {version_file} for {repo.name} on branch {branch}"
                     )
         elif config.version.get("git", False):
             version = commit_hash  # basically only the master branch
@@ -541,11 +555,11 @@ class BitbucketCloud(SccsApi):
 
             await run_async(pr_sync)
 
-        return (branch, BitbucketCloud.create_continuous_deployment_config_by_branch(
-            repository, version, branch, config, pullrequest_link
+        return (branch.name, BitbucketCloud.create_continuous_deployment_config_by_branch(
+            repo.name, version, branch.name, config, pullrequest_link
             ))
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_repository_permission(self, session: Cloud, repo_name: str) -> str | None:
         # get repository permissions for user
         try:
@@ -563,12 +577,12 @@ class BitbucketCloud(SccsApi):
             logging.warning(f"Error getting repository permissions: {e}")
             return None
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_projects(self, session: Cloud):
         """Return a list of projects"""
         return await run_async(session.get, f"/2.0/workspaces/{self.team}/projects")
 
-    @ats_cache()
+    @cache(ttl=timedelta(days=1))
     async def get_webhook_subscriptions(self, session: Cloud, repo_name: str):
         repo = await self.get_api_repository(session, repo_name)
         if repo is None:

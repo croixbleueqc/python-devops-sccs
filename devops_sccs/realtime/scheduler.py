@@ -38,9 +38,9 @@ class Scheduler(object):
             identity: tuple,
             poll_interval: int,
             func,
-            filtering: Callable[[Any], bool] = lambda _: True,
-            *args,
-            **kwargs,
+            args: tuple,
+            kwargs: dict,
+            event_filter: Callable[[Any], bool] = lambda _: True,
             ):
         """
         Run a new task or connect to an existing task
@@ -53,7 +53,7 @@ class Scheduler(object):
             w = self.tasks.get(wid)
 
         if w is None:
-            w = Watcher(wid, poll_interval, func, *args, **kwargs)
+            w = Watcher(wid, poll_interval, func, args, kwargs)
             async with self._lock:
                 self.tasks[wid] = w
 
@@ -70,7 +70,7 @@ class Scheduler(object):
                 if isinstance(event, Watcher.CloseSessionOnException):
                     raise event.get_exception()
 
-                if filtering(event):
+                if event_filter(event):
                     yield event
         except asyncio.CancelledError:
             logging.debug("cancelled")

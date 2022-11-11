@@ -26,9 +26,9 @@ from contextlib import asynccontextmanager
 from .context import Context
 from .errors import PluginAlreadyRegistered, PluginNotRegistered
 from .plugin import SccsApi
-# Built-in plugins
 from .provision import Provision
 from .realtime.scheduler import Scheduler
+from .redis import RedisCache
 from .schemas.config import Plugins, SccsConfig
 from .typing.credentials import Credentials
 
@@ -56,6 +56,14 @@ class SccsClient(object):
     @classmethod
     async def create(cls, config: SccsConfig):
         self = SccsClient()
+
+        # Initialize the cache
+        try:
+            await RedisCache().init()
+        except Exception:
+            logging.error("Unable to initialize Redis cache. Exiting...")
+            sys.exit(1)
+
         if config.provision is not None:
             self.provision = Provision(config=config.provision)
 

@@ -283,7 +283,7 @@ class SccsApi(ABC):
 
         Args:
             session(object): the session
-            repository(str): the repository name
+            repo_name(str): the repository name
             environment(str): the environment (eg: production, development, qa, ...)
             version(str): version to deploy
 
