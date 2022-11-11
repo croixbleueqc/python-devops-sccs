@@ -86,15 +86,51 @@ class RedisCache:
         value = Serializer.serialize(value)
         return await self.client.set(key, value, ex=ttl)
 
-    async def get(self, key) -> Any:
+    async def get(self, key, default=None) -> Any:
         value = await self.client.get(key)
+        if value is None:
+            return default
         return Serializer.deserialize(value)
+
+    async def pop(self, key) -> Any:
+        value = await self.get(key)
+        await self.delete(key)
+        return value
 
     async def exists(self, key) -> bool:
         return await self.client.exists(key)
 
     async def delete(self, *keys) -> int:
         return await self.client.delete(*keys)
+
+    async def hexists(self, key, field) -> bool:
+        return await self.client.hexists(key, field)
+
+    async def hset(self, key, field, value):
+        value = Serializer.serialize(value)
+        return await self.client.hset(key, field, value)
+
+    async def hget(self, key, field, default=None):
+        value = await self.client.hget(key, field)
+        if value is None:
+            return default
+        return Serializer.deserialize(value)
+
+    async def hgetall(self, key):
+        values = await self.client.hgetall(key)
+        return {int(k): Serializer.deserialize(v) for k, v in values.items()}
+
+    async def hpop(self, key, field) -> Any:
+        value = await self.hget(key, field)
+        await self.client.hdel(key, field)
+        return value
+
+    async def hkeys(self, key) -> list[int]:
+        return list(map(lambda k: int(k), await self.client.hkeys(key)))
+
+    async def hscan_iter(self, key):
+        async for key, value in self.client.hscan_iter(key):
+            yield int(key), Serializer.deserialize(value)
 
     async def delete_namespace(self, namespace) -> int:
         n = 0

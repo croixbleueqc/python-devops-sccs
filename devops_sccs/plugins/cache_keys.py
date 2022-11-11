@@ -70,7 +70,7 @@ class CacheKeyFn:
         return self(*key_fn_args, **key_fn_kwargs)
 
     @staticmethod
-    def make_default_key(name: str, *args: tuple, **kwargs: dict):
+    def make_default_key(name: str, *args: tuple, hash_it=False, **kwargs: dict):
         key = name
 
         hasargs = len(args) > 0 or len(kwargs) > 0
@@ -95,7 +95,7 @@ class CacheKeyFn:
             key += ', '.join([f'{k}={stringify(v)}' for k, v in kwargs.items()])
             key += ')'
 
-        return key
+        return key if not hash_it else hash(key)
 
     @staticmethod
     def prepend_namespace(namespace: str, key: str):
