@@ -26,7 +26,6 @@ import logging
 from typing import Callable
 
 from ..errors import SccsException
-from ..plugins.cache_keys import CacheKeyFn
 from ..redis import RedisCache
 from ..typing import WatcherType
 from ..typing.event import Event, EventType
@@ -69,7 +68,7 @@ class Watcher(object):
         # function
         self.func = lambda: func(*args, **kwargs, fetch=self.bypass_func_cache)
 
-        self.hkey = f"watcher:{CacheKeyFn.make_default_key(func.__name__, *args, hash_it=True, **kwargs)}"  # gets shared across workers, so no unique id
+        self.hkey = f"watcher:{self.wid}"
 
         # tasks
         self.running_task = None
