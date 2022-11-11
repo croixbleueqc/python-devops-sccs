@@ -25,7 +25,6 @@ from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.bitbucket.cloud.repositories.pipelines import Pipeline
 from atlassian.bitbucket.cloud.repositories.refs import Branch
 from atlassian.bitbucket.cloud.workspaces import Workspace
-from atlassian.errors import ApiNotFoundError
 from atlassian.rest_client import AtlassianRestAPI
 from requests import HTTPError
 
@@ -349,7 +348,7 @@ class BitbucketCloud(SccsApi):
         continuous_deployment: typing_cd.EnvironmentConfig
         try:
             continuous_deployment = (await self.get_continuous_deployment_config(
-                self.watcher, repo_name, [environment]
+                self.watcher, repo_name, [environment], fetch=True
                 ))[0]
         except IndexError:
             logging.warning(
@@ -362,7 +361,7 @@ class BitbucketCloud(SccsApi):
             )
 
         versions_available = await self.get_continuous_deployment_versions_available(
-            self.watcher, repo_name
+            self.watcher, repo_name, fetch=True
             )
 
         utils_cd.trigger_prepare(
@@ -374,7 +373,9 @@ class BitbucketCloud(SccsApi):
             raise TriggerCdEnvUnsupported(repo_name, environment)
 
         # noinspection PyUnboundLocalVariable
-        branch = cd_environment_config.branch  # code is unreachable if cd_environment_config is None (see above)
+        branch_name = cd_environment_config.branch  # code is unreachable if cd_environment_config is None (see above)
+
+        deploy_branch_name = f"continuous-deployment-{environment}"
 
         if cd_environment_config.trigger.get("pullrequest", False):
             # Continuous Deployment is done with a PR.
@@ -382,23 +383,21 @@ class BitbucketCloud(SccsApi):
             def check_pr_sync():
                 for pullrequest in repo.pullrequests.each():
                     if (
-                            pullrequest.destination_branch == branch and pullrequest.title is not None and self.cd_pullrequest_tag in pullrequest.title):
-                        link = pullrequest.get_link("html")
+                            pullrequest.destination_branch == branch_name and pullrequest.title is not None and self.cd_pullrequest_tag in pullrequest.title):
                         raise SccsException(
-                            f"A continuous deployment request is already open. link: {link['href'] if link else None}"
+                            f'A continuous deployment request is already open. link: {pullrequest.get_link("html")}'
                             )
 
             await run_async(check_pr_sync)
 
-            deploy_branch = await run_async(repo.branches.get, name=branch)
+            deploy_branch = await run_async(repo.branches.get, branch_name)
 
-            deploy_branch.name = f"continuous-deployment-{environment}"
             try:
                 # If the branch already exists, we should remove it.
-                await run_async(repo.branches.delete, path=f"{deploy_branch.name}")
-            except ApiNotFoundError:
+                await run_async(repo.branches.delete, path=f"{deploy_branch_name}")
+            except HTTPError:
                 pass
-            await run_async(deploy_branch.create)
+            await run_async(repo.branches.create, deploy_branch_name, deploy_branch.hash)
         else:
             deploy_branch = None
 
@@ -411,7 +410,7 @@ class BitbucketCloud(SccsApi):
                 f'/{cd_environment_config.version["file"]}': f"{version}\n",
                 "message": f"deploy version {version}",
                 "author": author,
-                "branch": branch if deploy_branch is None else deploy_branch.name,
+                "branch": branch_name if deploy_branch is None else deploy_branch_name,
                 }, auth=(session.username, session.password),  # type: ignore
             )
 
@@ -420,13 +419,13 @@ class BitbucketCloud(SccsApi):
             pr = await run_async(
                 repo.pullrequests.create,
                 title=f"Ugrade {environment} {self.cd_pullrequest_tag}",
-                source_branch=deploy_branch.name,
-                destination_branch=branch,
-                close_source_branch=True, )
+                source_branch=deploy_branch_name,
+                destination_branch=branch_name,
+                close_source_branch=True
+                )
 
             # race condition start here
-            link = pr.get_link("html")
-            continuous_deployment.pullrequest = link["href"] if link else None
+            continuous_deployment.pullrequest = pr.get_link("html")
         else:
             # Continuous Deployment done
             continuous_deployment.version = version
