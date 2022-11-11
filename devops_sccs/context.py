@@ -16,7 +16,6 @@
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
 from .plugin import SccsApi
-from .typing.event import Event, EventType
 
 
 class Context:
@@ -103,7 +102,7 @@ class Context:
 
         self._client.scheduler.notify((Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name))
 
-        return Event(key=result.key, _type=EventType.ADDED, value=result)
+        return result
 
     async def get_continuous_deployment_environments_available(self, repo_name):
         return await self.plugin.get_continuous_deployment_environments_available(
