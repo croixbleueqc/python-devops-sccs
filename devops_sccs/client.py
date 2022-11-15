@@ -59,7 +59,7 @@ class SccsClient(object):
 
         # Initialize the cache
         try:
-            await RedisCache().init()
+            RedisCache().init()
         except Exception:
             logging.error("Unable to initialize Redis cache. Exiting...")
             sys.exit(1)

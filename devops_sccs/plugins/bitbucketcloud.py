@@ -202,7 +202,6 @@ class BitbucketCloud(SccsApi):
                 return repo
         return None
 
-    @cache(ttl=timedelta(days=1))
     async def get_api_repository(self, session: Cloud, repo_name: str) -> Repository | None:
         """Returns an unmodified Repository object as returned by the API"""
 
@@ -245,13 +244,11 @@ class BitbucketCloud(SccsApi):
             # Get supported branches
             for idx, branch_name in enumerate(self.cd_branches_accepted):
                 try:
-                    b = repo.branches.get(branch_name)
                     if len(environments) == 0 or self.cd_environments[idx].name in environments:
+                        b = repo.branches.get(branch_name)
                         deploys.append((b, idx))
                 except (KeyError, ValueError, HTTPError):
                     pass
-
-            deploys.sort(key=lambda x: x[1])
 
             return deploys
 
@@ -260,6 +257,8 @@ class BitbucketCloud(SccsApi):
         if len(deploys) == 0:
             logging.warning(f"Continuous deployment not supported for {repo_name}")
             return []
+
+        deploys = sorted(deploys, key=lambda d: d[1])
 
         tasks = []
         for branch, index in deploys:
@@ -509,10 +508,6 @@ class BitbucketCloud(SccsApi):
             pullrequest=pullrequest if trigger_config.get("pullrequest", False) else None, )
         return env
 
-    @cache(
-        ttl=timedelta(days=1)
-
-        )
     async def get_continuous_deployment_config_by_branch(
             self, repo: Repository, branch: Branch, config: Environment
             ) -> tuple[str, typing_cd.EnvironmentConfig]:
