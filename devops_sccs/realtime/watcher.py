@@ -23,14 +23,16 @@ Provide a way to poll an API and to stream results as events (ADD, MODIFY, DELET
 
 import asyncio
 import logging
-from collections import OrderedDict
-from typing import Any, Callable
+from typing import Callable
 
 from ..errors import SccsException
+from ..redis import RedisCache
 from ..typing import WatcherType
 from ..typing.event import Event, EventType
 
 _sentinel = object()
+
+cache = RedisCache()
 
 
 class Watcher(object):
@@ -63,11 +65,10 @@ class Watcher(object):
         self.poll_event = asyncio.Event()
         self.bypass_func_cache = bypass_func_cache
 
-        # Caching
-        self.cache: OrderedDict[int, Any] = OrderedDict()
-
         # function
         self.func = lambda: func(*args, **kwargs, fetch=self.bypass_func_cache)
+
+        self.hkey = f"watcher:{self.wid}"
 
         # tasks
         self.running_task = None
@@ -93,10 +94,10 @@ class Watcher(object):
             # First client ?
             if len(self.queues) == 1:
                 self.start()
-            elif len(self.cache) > 0:
+            elif len(await cache.hkeys(self.hkey)) > 0:
                 # Propagate previous events to the new client (all clients will be in sync after)
-                for value in self.cache.values():
-                    event = Event(_type=EventType.ADDED, value=value, key=value.key)
+                async for key, value in cache.hscan_iter(self.hkey):
+                    event = Event(_type=EventType.ADDED, value=value, key=key)
                     queue.put_nowait(event)
 
     async def unsubscribe(self, client: asyncio.Queue):
@@ -137,35 +138,30 @@ class Watcher(object):
 
             # Protect the cache and list of clients
             async with self._lock:
+                # standardize the values
                 for value in values:
                     if not isinstance(value, WatcherType):
-                        logging.error("watcher: value is invalid")
                         value = WatcherType(
                             key=hash(str(value)),
                             data=value.dict() if hasattr(value, "dict") else value,
                             )
 
-                # DELETED before
+                # Remove old values (in cache but not in the new list)
                 values_keys = set(v.key for v in values)
-                cache_keys = self.cache.keys()
+                cache_keys = set(await cache.hkeys(self.hkey))
                 delete_keys = cache_keys - values_keys
 
                 for key in delete_keys:
                     event = Event(
                         _type=EventType.DELETED,
-                        value=self.cache.pop(key),
-                        key=key,
+                        value=await cache.hpop(self.hkey, key),
+                        key=key
                         )
-
-                    # Dispatch event
                     self._dispatch(event)
 
-                # ADDED / MODIFIED
+                # Add/update new values
                 for value in values:
-                    cache_value = self.cache.get(value.key, _sentinel)
-
-                    _type: EventType
-
+                    cache_value = await cache.hget(self.hkey, value.key, default=_sentinel)
                     if cache_value is _sentinel:
                         _type = EventType.ADDED
                     elif cache_value != value:
@@ -176,9 +172,8 @@ class Watcher(object):
                     event = Event(key=value.key, _type=_type, value=value)
 
                     # Update the cache
-                    self.cache[event.key] = event.value
+                    await cache.hset(self.hkey, value.key, value)
 
-                    # Dispatch event
                     self._dispatch(event)
 
     def _dispatch(self, event):
@@ -222,9 +217,9 @@ class Watcher(object):
                     event = Watcher.CloseSessionOnException(e)
                     self._dispatch(event)
 
-                # stop will be called once all clients will unsubscribe to this watcher. This is handled by the
-                # scheduler at this point, the watch is not running anymore and it is not possible to add new
-                # client on this watcher
+                # stop will be called once all clients will unsubscribe to this watcher. This is
+                # handled by the scheduler at this point, the watch is not running anymore and it
+                # is not possible to add new client on this watcher
 
         self.running_task = asyncio.create_task(async_start())
 
