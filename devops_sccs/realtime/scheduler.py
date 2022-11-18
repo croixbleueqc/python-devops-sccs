@@ -15,84 +15,56 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-import asyncio
-import logging
 from typing import Any, Callable
+from weakref import WeakValueDictionary
+
+from anyio.streams.memory import MemoryObjectSendStream
 
 from .watcher import Watcher
 
 
-class Scheduler(object):
+class PseudoScheduler(object):
     """
-    Scheduler module
-
-    Managing Watchers, subscription, unsubscribtion...
+    Wrap API values in a WatcherType object.
+    Exists solely to support the legacy API.
     """
 
     def __init__(self):
-        self.tasks = {}
-        self._lock = asyncio.Lock()
+        self._watchers = WeakValueDictionary()
 
     async def watch(
             self,
             identity: tuple,
             poll_interval: int,
+            send_stream: MemoryObjectSendStream,
             func,
-            args: tuple,
-            kwargs: dict,
+            args: tuple = (),
+            kwargs: dict = None,
             event_filter: Callable[[Any], bool] = lambda _: True,
             ):
-        """
-        Run a new task or connect to an existing task
-        """
+        if kwargs is None:
+            kwargs = {}
+
         wid = hash(identity)
-        w: Watcher | None = None
-
-        # Protect task creation
-        async with self._lock:
-            w = self.tasks.get(wid)
-
-        if w is None:
-            w = Watcher(wid, poll_interval, func, args, kwargs)
-            async with self._lock:
-                self.tasks[wid] = w
-
-        queue: asyncio.Queue = asyncio.Queue()
         try:
-            # Create client, connect to the watcher and read events
+            w = self._watchers[wid]
+        except KeyError:
+            w = Watcher(wid, poll_interval, func, args, kwargs, event_filter)
+            self._watchers[wid] = w
 
-            await w.subscribe(queue)
+        try:
+            await w.start(send_stream)
+        except Exception:
+            del self._watchers[wid]
+            raise
 
-            while True:
-                event = await queue.get()
-                queue.task_done()
-
-                if isinstance(event, Watcher.CloseSessionOnException):
-                    raise event.get_exception()
-
-                if event_filter(event):
-                    yield event
-        except asyncio.CancelledError:
-            logging.debug("cancelled")
-        finally:
-            # disconnect from the watcher
-            try:
-                await w.unsubscribe(queue)
-            except asyncio.CancelledError:
-                pass
-
-            # Protect task update
-            async with self._lock:
-                if w.is_empty():
-                    self.tasks.pop(wid)
-
-    def notify(self, identity: tuple):
+    async def notify(self, identity: tuple):
         """
         Notify watcher to update is content due to an outside event
         """
         wid = hash(identity)
-
-        w = self.tasks.get(wid)
-
-        if w is not None:
+        try:
+            w = self._watchers[wid]
             w.refresh(True)
+        except KeyError:
+            pass

@@ -21,11 +21,11 @@ Provide a way to poll an API and to stream results as events (ADD, MODIFY, DELET
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-import asyncio
-import logging
 from typing import Callable
 
-from ..errors import SccsException
+import anyio
+from loguru import logger
+
 from ..redis import RedisCache
 from ..typing import WatcherType
 from ..typing.event import Event, EventType
@@ -33,6 +33,28 @@ from ..typing.event import Event, EventType
 _sentinel = object()
 
 cache = RedisCache()
+
+
+def standardize_watcher_values(values):
+    if not isinstance(values, list):
+        values = [values]
+    values = list(
+        map(
+            lambda v: v if isinstance(v, WatcherType) else WatcherType(
+                key=hash(str(v)),
+                data=v.dict() if hasattr(v, "dict") else v,
+                )
+            , values
+            )
+        )
+    return values
+
+
+async def get_keys_to_delete(values, cache_values):
+    values_keys = set(v.key for v in values)
+    cache_keys = set(v.key for v in cache_values)
+    delete_keys = cache_keys - values_keys
+    return delete_keys
 
 
 class Watcher(object):
@@ -50,192 +72,110 @@ class Watcher(object):
             func: Callable,
             args: tuple,
             kwargs: dict,
-            bypass_func_cache=False,
+            event_filter: Callable[..., bool] = lambda _: True,
             ):
-        # Id
-        self.wid = watcher_id
-
-        # Sessions (subscribe/unsubscribe)
-        self.queues: list[asyncio.Queue] = []
-        self._lock = asyncio.Lock()
-        self.accepts_queues = True
-
-        # Polling
-        self.poll_interval = poll_interval
-        self.poll_event = asyncio.Event()
-        self.bypass_func_cache = bypass_func_cache
+        self.bypass_func_cache = False
 
         # function
-        self.func = lambda: func(*args, **kwargs, fetch=self.bypass_func_cache)
+        self.func = lambda: func(*args, fetch=self.bypass_func_cache, **kwargs)
 
-        self.hkey = f"watcher:{self.wid}"
+        self.key = f"watcher:{watcher_id}"
 
-        # tasks
-        self.running_task = None
+        self.poll_interval = poll_interval
+        self.poll_event = anyio.Event()
 
-    def refresh(self, bypass_cache: bool = False):
-        """
-        Force a refresh (notify the watch to refresh as soon as possible); and optionally bypass the
-        function's cache
-        """
-        self.bypass_func_cache = bypass_cache
-        self.poll_event.set()
+        self.event_filter = event_filter
 
-    async def subscribe(self, queue: asyncio.Queue):
-        """
-        Subscribe a session
-        """
-        async with self._lock:
-            if not self.accepts_queues:
-                raise SccsException("watcher: can't accept new session !")
+        self.refresh()
 
-            self.queues.append(queue)
+    async def start(self, send_stream):
+        if cache.exists(self.key):
+            events = self.get_watcher_cache_values_as_events()
+            if len(events) > 0:
+                for event in events:
+                    if self.event_filter(event):
+                        await send_stream.send(event)
+        else:
+            async with anyio.create_task_group() as tg:
+                tg.start_soon(self.fetch_events, send_stream)
+                tg.start_soon(self.timed_refresh)
 
-            # First client ?
-            if len(self.queues) == 1:
-                self.start()
-            elif len(await cache.hkeys(self.hkey)) > 0:
-                # Propagate previous events to the new client (all clients will be in sync after)
-                async for key, value in cache.hscan_iter(self.hkey):
-                    event = Event(_type=EventType.ADDED, value=value, key=key)
-                    queue.put_nowait(event)
+    async def fetch_events(self, send_stream):
+        async for event in self.watch():
+            if self.event_filter(event):
+                await send_stream.send(event)
 
-    async def unsubscribe(self, client: asyncio.Queue):
-        """
-        Unsubscribe a client
-        """
-        async with self._lock:
-            try:
-                self.queues.remove(client)
-            except ValueError:
-                pass
+    async def stop(self):
+        pass
 
-            if len(self.queues) == 0:
-                await self.stop()
-
-    def is_empty(self):
-        """
-        No client connected to this watcher
-        """
-        return len(self.queues) == 0
+    def get_watcher_cache_values_as_events(self) -> list[Event]:
+        values: list[WatcherType] = cache.get(self.key)
+        return list(
+            map(lambda value: Event(_type=EventType.ADDED, value=value, key=value.key), values)
+            )
 
     async def watch(self):
         """
         Watching for a specific resource
         """
-
         while True:
             await self.poll_event.wait()
-            self.poll_event.clear()
+            self.poll_event = anyio.Event()
+            logger.debug(f"Watcher {self.key} is polling")
 
-            values = await self.func()
+            try:
+                values = await self.func()
+                self.bypass_func_cache = False
+            except Exception:
+                raise
 
-            # !!! Revert cache bypass
-            self.bypass_func_cache = False
+            values = standardize_watcher_values(values)
 
-            if not isinstance(values, list):
-                values = [values]
+            events = []
+            # Remove old values (those in cache but not in the new list)
+            # !!! Important to retain the ordering of elements in the list because it's the only source
+            # of truth for environment ordering on the frontend (e.g. master -> dev -> qa -> prod) in
+            # the case of get_continuous_deployment_config calls)...
+            cached_values: list[WatcherType] = cache.get(self.key, [])
+            keys_to_delete = await get_keys_to_delete(values, cached_values)
+            for key in keys_to_delete:
+                value = next((v for v in cached_values if v.key == key), None)
+                event = Event(
+                    _type=EventType.DELETED,
+                    value=value,
+                    key=key
+                    )
+                events.append(event)
 
-            # Protect the cache and list of clients
-            async with self._lock:
-                # standardize the values
-                for value in values:
-                    if not isinstance(value, WatcherType):
-                        value = WatcherType(
-                            key=hash(str(value)),
-                            data=value.dict() if hasattr(value, "dict") else value,
-                            )
+            # Add/update new values
+            for value in values:
+                cache_value = next((v for v in cached_values if v.key == value.key), _sentinel)
+                if cache_value is _sentinel:  # new value
+                    _type = EventType.ADDED
+                elif cache_value != value:  # modified value
+                    _type = EventType.MODIFIED
+                else:  # no change
+                    continue
 
-                # Remove old values (in cache but not in the new list)
-                values_keys = set(v.key for v in values)
-                cache_keys = set(await cache.hkeys(self.hkey))
-                delete_keys = cache_keys - values_keys
+                event = Event(key=value.key, _type=_type, value=value)
 
-                for key in delete_keys:
-                    event = Event(
-                        _type=EventType.DELETED,
-                        value=await cache.hpop(self.hkey, key),
-                        key=key
-                        )
-                    self._dispatch(event)
+                events.append(event)
 
-                # Add/update new values
-                for value in values:
-                    cache_value = await cache.hget(self.hkey, value.key, default=_sentinel)
-                    if cache_value is _sentinel:
-                        _type = EventType.ADDED
-                    elif cache_value != value:
-                        _type = EventType.MODIFIED
-                    else:
-                        continue
+            # Update the cache
+            cache.set(self.key, values)
 
-                    event = Event(key=value.key, _type=_type, value=value)
+            for event in events:
+                yield event
 
-                    # Update the cache
-                    await cache.hset(self.hkey, value.key, value)
-
-                    self._dispatch(event)
-
-    def _dispatch(self, event):
-        for queue in self.queues:
-            queue.put_nowait(event)
+    def refresh(self, fetch: bool = False):
+        """
+        Force a refresh (notify the watch to refresh as soon as possible); and optionally bypass the
+        function's cache.
+        """
+        self.bypass_func_cache = fetch
+        self.poll_event.set()
 
     async def timed_refresh(self):
-        """
-        refresh at fixed interval (polling)
-        """
         while True:
-            self.refresh(self.bypass_func_cache)
-            await asyncio.sleep(self.poll_interval)
-
-    def start(self):
-        """
-        Start the watcher
-        """
-        if self.running_task is not None:
-            return
-
-        logging.info("Starting watcher")
-
-        async def async_start():
-            watch_task = None
-            timed_task = None
-            try:
-                watch_task = asyncio.create_task(self.watch())
-                timed_task = asyncio.create_task(self.timed_refresh())
-                await asyncio.gather(watch_task, timed_task)
-            except Exception as e:
-                logging.error(f"watcher: an exception occurred during the polling: {e}")
-                if watch_task:
-                    watch_task.cancel()
-                if timed_task:
-                    timed_task.cancel()
-
-                # Notify all clients about the exception
-                async with self._lock:
-                    self.accepts_queues = False
-                    event = Watcher.CloseSessionOnException(e)
-                    self._dispatch(event)
-
-                # stop will be called once all clients will unsubscribe to this watcher. This is
-                # handled by the scheduler at this point, the watch is not running anymore and it
-                # is not possible to add new client on this watcher
-
-        self.running_task = asyncio.create_task(async_start())
-
-    async def stop(self):
-        """
-        Stop the watcher
-        """
-        if self.running_task is None:
-            return
-
-        logging.debug("Stopping watcher")
-
-        self.running_task.cancel()
-
-        try:
-            await self.running_task
-        finally:
-            self.running_task = None
-            self.accepts_queues = True
+            self.refresh()
+            await anyio.sleep(self.poll_interval)
