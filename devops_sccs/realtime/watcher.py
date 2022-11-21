@@ -95,10 +95,9 @@ class Watcher(object):
                 for event in events:
                     if self.event_filter(event):
                         await send_stream.send(event)
-        else:
-            async with anyio.create_task_group() as tg:
-                tg.start_soon(self.fetch_events, send_stream)
-                tg.start_soon(self.timed_refresh)
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(self.fetch_events, send_stream)
+            tg.start_soon(self.timed_refresh)
 
     async def fetch_events(self, send_stream):
         async for event in self.watch():
