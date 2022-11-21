@@ -27,7 +27,7 @@ from .context import Context
 from .errors import PluginAlreadyRegistered, PluginNotRegistered
 from .plugin import SccsApi
 from .provision import Provision
-from .realtime.scheduler import PseudoScheduler
+from .realtime.scheduler import Scheduler
 from .redis import RedisCache
 from .schemas.config import Plugins, SccsConfig
 from .typing.credentials import Credentials
@@ -50,7 +50,7 @@ class SccsClient(object):
 
     def __init__(self):
         """Initialize plugins and internal modules"""
-        self.scheduler = PseudoScheduler()
+        self.scheduler = Scheduler()
         self.provision: Provision
 
     @classmethod

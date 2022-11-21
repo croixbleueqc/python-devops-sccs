@@ -23,7 +23,7 @@ from anyio.streams.memory import MemoryObjectSendStream
 from .watcher import Watcher
 
 
-class PseudoScheduler(object):
+class Scheduler(object):
     """
     Wrap API values in a WatcherType object.
     Exists solely to support the legacy API.

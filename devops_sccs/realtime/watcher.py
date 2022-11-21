@@ -79,7 +79,7 @@ class Watcher(object):
         # function
         self.func = lambda: func(*args, fetch=self.bypass_func_cache, **kwargs)
 
-        self.key = f"watcher:{watcher_id}"
+        self.key = f"watcher:{func.__name__}:{watcher_id}"
 
         self.poll_interval = poll_interval
         self.poll_event = anyio.Event()
