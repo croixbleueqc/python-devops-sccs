@@ -7,7 +7,7 @@ import logging
 from typing import Callable
 
 import anyio
-from anyio import Lock, get_cancelled_exc_class, BrokenResourceError
+from anyio import get_cancelled_exc_class, BrokenResourceError
 from anyio.streams.memory import MemoryObjectSendStream
 
 from ..errors import SccsException
@@ -59,7 +59,6 @@ class Watcher:
         self.func = lambda: func(*args, fetch=self.bypass_func_cache, **kwargs)
         self.key = f"watcher:{func.__name__}:{watcher_id}"
         self.streams = set()
-        self.streams_lock = Lock()
         self.streams_accepted = True
         self.watch_tg = None
         self.is_watching = False
@@ -68,10 +67,9 @@ class Watcher:
         return len(self.streams) > 0
 
     async def subscribe(self, send_stream: MemoryObjectSendStream):
-        async with self.streams_lock:
-            if not self.streams_accepted:
-                raise SccsException("Watcher is not accepting new streams")
-            self.streams.add(send_stream)
+        if not self.streams_accepted:
+            raise SccsException("Watcher is not accepting new streams")
+        self.streams.add(send_stream)
 
         if len(self.streams) == 1:
             await self.start()
@@ -80,14 +78,13 @@ class Watcher:
                 await self.dispatch_event(event)
 
     async def unsubscribe(self, send_stream: MemoryObjectSendStream):
-        async with self.streams_lock:
-            try:
-                self.streams.remove(send_stream)
-            except ValueError:
-                pass
+        try:
+            self.streams.remove(send_stream)
+        except ValueError:
+            pass
 
-            if len(self.streams) == 0:
-                self.stop()
+        if len(self.streams) == 0:
+            await self.stop()
 
     async def start(self):
         if self.watch_tg is None:
@@ -103,12 +100,13 @@ class Watcher:
                     logging.debug("Watcher cancelled")
                     raise
 
-    def stop(self):
+    async def stop(self):
         if self.watch_tg is not None:
             self.watch_tg.cancel_scope.cancel()
             cache.delete(self.key)
             self.watch_tg = None
             self.streams_accepted = True
+            self.streams.clear()
 
     async def watch_for_and_send_events(self):
         async for event in self.watch():

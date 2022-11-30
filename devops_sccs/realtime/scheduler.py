@@ -5,7 +5,7 @@ from typing import Any, Callable
 from anyio import (
     create_memory_object_stream,
     create_task_group,
-    Event, Lock, TASK_STATUS_IGNORED,
+    Event, Lock, TASK_STATUS_IGNORED, get_cancelled_exc_class,
     )
 from anyio.abc import TaskStatus
 from anyio.streams.memory import MemoryObjectSendStream
@@ -79,6 +79,9 @@ class Scheduler(object):
                 await w.unsubscribe(w_send_stream)
             except Exception:
                 await w.unsubscribe(w_send_stream)
+                raise
+            except get_cancelled_exc_class():
+                await w.stop()
                 raise
             finally:
                 if not w.has_subscribers():
