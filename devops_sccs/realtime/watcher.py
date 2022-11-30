@@ -3,62 +3,42 @@ Watcher module
 
 Provide a way to poll an API and to stream results as events (ADD, MODIFY, DELETE)
 """
+import logging
+from typing import Callable
+
+import anyio
+from anyio import Lock, get_cancelled_exc_class, BrokenResourceError
+from anyio.streams.memory import MemoryObjectSendStream
+
+from ..errors import SccsException
+from ..redis import RedisCache
+from ..typing import WatcherType
+from ..typing.event import Event, EventType
 
 # Copyright 2021-2022 Croix Bleue du Québec
-
 # This file is part of python-devops-sccs.
-
 # python-devops-sccs is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
 # python-devops-sccs is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
-
-from typing import Callable
-
-import anyio
-from loguru import logger
-
-from ..redis import RedisCache
-from ..typing import WatcherType
-from ..typing.event import Event, EventType
 
 _sentinel = object()
 
 cache = RedisCache()
 
 
-def standardize_watcher_values(values):
-    if not isinstance(values, list):
-        values = [values]
-    values = list(
-        map(
-            lambda v: v if isinstance(v, WatcherType) else WatcherType(
-                key=hash(str(v)),
-                data=v.dict() if hasattr(v, "dict") else v,
-                )
-            , values
-            )
-        )
-    return values
+class WatcherCancelled(Exception):
+    pass
 
 
-async def get_keys_to_delete(values, cache_values):
-    values_keys = set(v.key for v in values)
-    cache_keys = set(v.key for v in cache_values)
-    delete_keys = cache_keys - values_keys
-    return delete_keys
-
-
-class Watcher(object):
-    class CloseSessionOnException(object):
+class Watcher:
+    class CloseClientOnException:
         def __init__(self, exception):
             self.exception = exception
 
@@ -72,64 +52,97 @@ class Watcher(object):
             func: Callable,
             args: tuple,
             kwargs: dict,
-            event_filter: Callable[..., bool] = lambda _: True,
             ):
-        self.bypass_func_cache = False
-
-        # function
-        self.func = lambda: func(*args, fetch=self.bypass_func_cache, **kwargs)
-
-        self.key = f"watcher:{func.__name__}:{watcher_id}"
-
         self.poll_interval = poll_interval
         self.poll_event = anyio.Event()
+        self.bypass_func_cache = False
+        self.func = lambda: func(*args, fetch=self.bypass_func_cache, **kwargs)
+        self.key = f"watcher:{func.__name__}:{watcher_id}"
+        self.streams = set()
+        self.streams_lock = Lock()
+        self.streams_accepted = True
+        self.watch_tg = None
+        self.is_watching = False
 
-        self.event_filter = event_filter
+    def has_subscribers(self):
+        return len(self.streams) > 0
 
-        self.refresh()
+    async def subscribe(self, send_stream: MemoryObjectSendStream):
+        async with self.streams_lock:
+            if not self.streams_accepted:
+                raise SccsException("Watcher is not accepting new streams")
+            self.streams.add(send_stream)
 
-    async def start(self, send_stream):
-        if cache.exists(self.key):
-            events = self.get_watcher_cache_values_as_events()
-            if len(events) > 0:
-                for event in events:
-                    if self.event_filter(event):
-                        await send_stream.send(event)
-        async with anyio.create_task_group() as tg:
-            tg.start_soon(self.fetch_events, send_stream)
-            tg.start_soon(self.timed_refresh)
+        if len(self.streams) == 1:
+            await self.start()
+        elif len(self.streams) > 0:
+            for event in self.get_watcher_cache_values_as_events():
+                await self.dispatch_event(event)
 
-    async def fetch_events(self, send_stream):
+    async def unsubscribe(self, send_stream: MemoryObjectSendStream):
+        async with self.streams_lock:
+            try:
+                self.streams.remove(send_stream)
+            except ValueError:
+                pass
+
+            if len(self.streams) == 0:
+                self.stop()
+
+    async def start(self):
+        if self.watch_tg is None:
+            async with anyio.create_task_group() as tg:
+                self.watch_tg = tg
+                try:
+                    tg.start_soon(self.watch_for_and_send_events)
+                    tg.start_soon(self.timed_refresh)
+                except Exception as e:
+                    self.streams_accepted = False
+                    await self.dispatch_event(self.CloseClientOnException(e))
+                except get_cancelled_exc_class():
+                    logging.debug("Watcher cancelled")
+                    raise
+
+    def stop(self):
+        if self.watch_tg is not None:
+            self.watch_tg.cancel_scope.cancel()
+            cache.delete(self.key)
+            self.watch_tg = None
+            self.streams_accepted = True
+
+    async def watch_for_and_send_events(self):
         async for event in self.watch():
-            if self.event_filter(event):
-                await send_stream.send(event)
+            await self.dispatch_event(event)
 
-    async def stop(self):
-        pass
+    async def dispatch_event(self, event):
+        for send_stream in self.streams:
+            try:
+                await send_stream.send(event)
+            except BrokenResourceError:
+                self.streams.remove(send_stream)
+                raise
 
     def get_watcher_cache_values_as_events(self) -> list[Event]:
         values: list[WatcherType] = cache.get(self.key)
+        if values is None:
+            return []
         return list(
             map(lambda value: Event(_type=EventType.ADDED, value=value, key=value.key), values)
             )
 
     async def watch(self):
-        """
-        Watching for a specific resource
-        """
         while True:
             await self.poll_event.wait()
             self.poll_event = anyio.Event()
-            logger.debug(f"Watcher {self.key} is polling")
 
             try:
                 values = await self.func()
+                # !!! Reset the bypass cache flag
                 self.bypass_func_cache = False
             except Exception:
                 raise
 
             values = standardize_watcher_values(values)
-
             events = []
             # Remove old values (those in cache but not in the new list)
             # !!! Important to retain the ordering of elements in the list because it's the only source
@@ -162,7 +175,6 @@ class Watcher(object):
 
             # Update the cache
             cache.set(self.key, values)
-
             for event in events:
                 yield event
 
@@ -178,3 +190,25 @@ class Watcher(object):
         while True:
             self.refresh()
             await anyio.sleep(self.poll_interval)
+
+
+def standardize_watcher_values(values):
+    if not isinstance(values, list):
+        values = [values]
+    values = list(
+        map(
+            lambda v: v if isinstance(v, WatcherType) else WatcherType(
+                key=hash(str(v)),
+                data=v.dict() if hasattr(v, "dict") else v,
+                )
+            , values
+            )
+        )
+    return values
+
+
+async def get_keys_to_delete(values, cache_values):
+    values_keys = set(v.key for v in values)
+    cache_keys = set(v.key for v in cache_values)
+    delete_keys = cache_keys - values_keys
+    return delete_keys

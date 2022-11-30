@@ -47,15 +47,13 @@ class Serializer:
 class RedisCache:
     """Basic singleton wrapper for redis client.  Pickles/Dills everything."""
     _cache = None
+    redis = None
+    _is_initialized = False
 
     def __new__(cls, *args, **kwargs):
         if not cls._cache:
             cls._cache = super().__new__(cls)
         return cls._cache
-
-    def __init__(self):
-        self.redis: Redis = None
-        self._is_initialized = False
 
     def init(self):
         if self._is_initialized:
@@ -73,23 +71,32 @@ class RedisCache:
             self.redis = None
             raise e
 
+        logger.debug("REDIS CACHE initialized")
         self._is_initialized = True
 
     def set(self, key, value, ttl=timedelta(hours=1)) -> bool:
         value = Serializer.serialize(value)
-        return self.redis.set(key, value, ex=ttl)
+        success = self.redis.set(key, value, ex=ttl)
+        if success:
+            logger.debug(f'REDIS CACHE SET for "{key}"')
+        return success
 
     def get(self, key, default=None) -> Any:
         value = self.redis.get(key)
         if value is None:
+            logger.debug(f'REDIS CACHE MISS for "{key}"')
             return default
-        return Serializer.deserialize(value)
+        value = Serializer.deserialize(value)
+        logger.debug(f'REDIS CACHE HIT for "{key}"')
+        return value
 
     def exists(self, key) -> bool:
         return self.redis.exists(key) > 0
 
     def delete(self, *keys) -> int:
-        return self.redis.delete(*keys)
+        n = self.redis.delete(*keys)
+        logger.debug(f"REDIS CACHE DELETE {n} keys for {keys}")
+        return n
 
     def delete_namespace(self, namespace) -> int:
         n = 0
@@ -98,6 +105,7 @@ class RedisCache:
         return n
 
     def clear(self):
+        logger.debug("REDIS CACHE CLEAR")
         self.redis.flushall()
 
     @property
@@ -143,14 +151,11 @@ def cache(
             if fetch:
                 logger.debug(f'REDIS CACHE: fetch flag set, deleting cached value')
                 n = _cache.delete(_key)
-                logger.debug(f'REDIS CACHE: deleted {n} keys')
 
             cached = _cache.get(_key)
             if cached is not None:
-                logger.debug(f'REDIS CACHE HIT for key {_key}')
                 return cached
 
-            logger.debug(f'REDIS CACHE MISS for key {_key}')
             result = await method(_self(), *args, **kwargs)
             _cache.set(_key, result, ttl=ttl)
             return result

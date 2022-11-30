@@ -18,7 +18,6 @@ import inspect
 import logging
 from datetime import timedelta
 
-import requests
 from atlassian.bitbucket import Cloud
 from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.bitbucket.cloud.repositories.pipelines import Pipeline
@@ -307,7 +306,10 @@ class BitbucketCloud(SccsApi):
             if target is None or state is None or target["type"] != "pipeline_ref_target":
                 continue
             ref_name = target["ref_name"]
-            result_name = state["result"]["name"]
+            try:
+                result_name = state["result"]["name"]
+            except KeyError:
+                raise SccsException(f"Unexpected pipeline state: {state['name']}")
             if ref_name in self.cd_versions_available and result_name == "SUCCESSFUL":
                 available = typing_cd.Available(
                     key=hash((repo_name, pipeline.build_number)),
@@ -350,6 +352,7 @@ class BitbucketCloud(SccsApi):
         """
         Trigger a deployment in a specific environment
         """
+        logging.info(f"TRIGGER CD of {version} in {environment} for {repo_name}")
 
         # Get Continuous Deployment configuration for the environment requested
         cd_environment_config: Environment
@@ -373,10 +376,6 @@ class BitbucketCloud(SccsApi):
                 f"Continuous deployment config not found for {repo_name} on environment {environment}"
                 )
             raise TriggerCdEnvUnsupported(repo_name, environment)
-
-        logging.info(
-            f"Triggering new deploy on env : {environment} with version: {continuous_deployment.version}"
-            )
 
         versions_available = await self.get_continuous_deployment_versions_available(
             self.watcher, repo_name, fetch=True
@@ -402,7 +401,7 @@ class BitbucketCloud(SccsApi):
                 if (
                         pullrequest.destination_branch == branch_name and pullrequest.title is not None and self.cd_pullrequest_tag in pullrequest.title):
                     raise SccsException(
-                        f'A continuous deployment request is already open. link: {pullrequest.get_link("html")}'
+                        f'TRIGGER CD: A continuous deployment request is already open. link: {pullrequest.get_link("html")}'
                         )
 
             deploy_branch = repo.branches.get(branch_name)
@@ -416,17 +415,29 @@ class BitbucketCloud(SccsApi):
         else:
             deploy_branch = None
 
-        author = await self.get_session_author(session)
-
-        # see https://github.com/atlassian-api/atlassian-python-api/issues/1045#issue-1368184335
-        # for the reason why we need to use the requests library directly
-        requests.request(
-            "POST", repo.url + "/src", data={
+        # requests.request(
+        #     "POST", repo.url + "/src", data={
+        #         f'/{cd_environment_config.version["file"]}': f"{version}\n",
+        #         "message": f"deploy version {version}",
+        #         "author": author,
+        #         "branch": branch_name if deploy_branch is None else deploy_branch_name,
+        #         }, auth=(session.username, session.password),  # type: ignore
+        #     )
+        post_branch_name = branch_name if deploy_branch is None else deploy_branch_name
+        logging.info(
+            f"TRIGGER CD: POST {version} to version.txt for {repo_name} on {post_branch_name}"
+            )
+        repo.post(
+            "src",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
                 f'/{cd_environment_config.version["file"]}': f"{version}\n",
                 "message": f"deploy version {version}",
-                "author": author,
-                "branch": branch_name if deploy_branch is None else deploy_branch_name,
-                }, auth=(session.username, session.password),  # type: ignore
+                "author": (await self.get_session_author(session)),
+                "branch": post_branch_name,
+                },
+            files=[],
+            # see https://github.com/atlassian-api/atlassian-python-api/issues/1045#issue-1368184335
             )
 
         if deploy_branch is not None:
@@ -444,10 +455,7 @@ class BitbucketCloud(SccsApi):
             # Continuous Deployment done
             continuous_deployment.version = version
 
-        # race condition finish after that statement.
-
         # Return the new configuration (new version or PR in progress)
-
         return continuous_deployment
 
     async def bridge_repository_to_namespace(

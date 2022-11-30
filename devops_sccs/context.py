@@ -1,4 +1,5 @@
 # Copyright 2021-2022 Croix Bleue du Québec
+from anyio import sleep, Event
 from anyio.streams.memory import MemoryObjectSendStream
 
 from .plugin import SccsApi
@@ -67,11 +68,13 @@ class Context:
             self,
             poll_interval: int,
             send_stream: MemoryObjectSendStream,
+            cancel_event: Event,
             ):
         await self._client.scheduler.watch(
             (Context.UUID_WATCH_REPOSITORIES, self.session_id),
             poll_interval,
             send_stream,
+            cancel_event,
             self.plugin.get_repositories,
             args=(None,),
             )
@@ -80,6 +83,7 @@ class Context:
             self,
             poll_interval: int,
             send_stream: MemoryObjectSendStream,
+            cancel_event: Event,
             repo_name: str,
             environments: list,
             ):
@@ -87,6 +91,7 @@ class Context:
             (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name),
             poll_interval,
             send_stream,
+            cancel_event,
             self.plugin.get_continuous_deployment_config,
             args=(None, repo_name, environments),
             event_filter=lambda e: not environments or e.value.environment in environments
@@ -96,6 +101,7 @@ class Context:
             self,
             poll_interval: int,
             send_stream: MemoryObjectSendStream,
+            cancel_event: Event,
             repo_name: str,
             ):
         # await self.accesscontrol(repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
@@ -104,6 +110,7 @@ class Context:
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repo_name),
             poll_interval,
             send_stream,
+            cancel_event,
             self.plugin.get_continuous_deployment_versions_available,
             args=(None, repo_name),
             )
@@ -112,6 +119,7 @@ class Context:
             self,
             poll_interval: int,
             send_stream: MemoryObjectSendStream,
+            cancel_event: Event,
             repo_name,
             ):
         # await self.accesscontrol(
@@ -122,6 +130,7 @@ class Context:
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repo_name,),
             poll_interval,
             send_stream,
+            cancel_event,
             self.plugin.get_continuous_deployment_environments_available,
             args=(None, repo_name),
             )
@@ -131,6 +140,7 @@ class Context:
             self.session, repo_name, environment, version
             )
 
+        await sleep(10)
         await self._client.scheduler.notify(
             (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name)
             )
