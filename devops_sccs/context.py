@@ -1,21 +1,21 @@
 # Copyright 2021-2022 Croix Bleue du Québec
+from anyio import sleep, Event
+from anyio.streams.memory import MemoryObjectSendStream
+
+from .plugin import SccsApi
+
 
 # This file is part of python-devops-sccs.
-
 # python-devops-sccs is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
 # python-devops-sccs is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
-
-from .plugin import SccsApi
 
 
 class Context:
@@ -47,15 +47,6 @@ class Context:
     async def get_repository(self, repo_name):
         return await self.plugin.get_repository(self.session, repo_name)
 
-    async def watch_repositories(self, poll_interval: int, *args, **kwargs):
-        return self._client.scheduler.watch(
-            (Context.UUID_WATCH_REPOSITORIES, self.session_id),
-            poll_interval,
-            self.plugin.get_repositories,
-            args=(self.session, *args),
-            kwargs=kwargs
-            )
-
     async def get_continuous_deployment_config(self, repo_name, environments=None):
         if environments is None:
             environments = []
@@ -63,36 +54,85 @@ class Context:
             self.session, repo_name, environments
             )
 
-    async def watch_continuous_deployment_config(
-            self, poll_interval: int, repo_name: str, environments: list, kwargs: dict,
-            ):
-        # await self.accesscontrol(repo_name, Action.WATCH_CONTINOUS_DEPLOYMENT_CONFIG)
-
-        return self._client.scheduler.watch(
-            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name),
-            poll_interval,
-            self.plugin.get_continuous_deployment_config,
-            args=(None, repo_name, environments),
-            kwargs=kwargs,
-            event_filter=lambda e: not environments or e.value.environment in environments,
-            )
-
     async def get_continuous_deployment_versions_available(self, repository):
         return await self.plugin.get_continuous_deployment_versions_available(
             self.session, repository
             )
 
+    async def get_continuous_deployment_environments_available(self, repo_name):
+        return await self.plugin.get_continuous_deployment_environments_available(
+            self.session, repo_name
+            )
+
+    async def watch_repositories(
+            self,
+            poll_interval: int,
+            send_stream: MemoryObjectSendStream,
+            cancel_event: Event,
+            ):
+        await self._client.scheduler.watch(
+            (Context.UUID_WATCH_REPOSITORIES, self.session_id),
+            poll_interval,
+            send_stream,
+            cancel_event,
+            self.plugin.get_repositories,
+            args=(None,),
+            )
+
+    async def watch_continuous_deployment_config(
+            self,
+            poll_interval: int,
+            send_stream: MemoryObjectSendStream,
+            cancel_event: Event,
+            repo_name: str,
+            environments: list,
+            ):
+        await self._client.scheduler.watch(
+            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name),
+            poll_interval,
+            send_stream,
+            cancel_event,
+            self.plugin.get_continuous_deployment_config,
+            args=(None, repo_name, environments),
+            event_filter=lambda e: not environments or e.value.environment in environments
+            )
+
     async def watch_continuous_deployment_versions_available(
-            self, repo_name: str, poll_interval: int, *args, **kwargs
+            self,
+            poll_interval: int,
+            send_stream: MemoryObjectSendStream,
+            cancel_event: Event,
+            repo_name: str,
             ):
         # await self.accesscontrol(repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
 
-        return self._client.scheduler.watch(
+        await self._client.scheduler.watch(
             (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repo_name),
             poll_interval,
+            send_stream,
+            cancel_event,
             self.plugin.get_continuous_deployment_versions_available,
-            args=(None, repo_name, *args),
-            kwargs=kwargs
+            args=(None, repo_name),
+            )
+
+    async def watch_continuous_deployment_environments_available(
+            self,
+            poll_interval: int,
+            send_stream: MemoryObjectSendStream,
+            cancel_event: Event,
+            repo_name,
+            ):
+        # await self.accesscontrol(
+        #     repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
+        #     )
+
+        await self._client.scheduler.watch(
+            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repo_name,),
+            poll_interval,
+            send_stream,
+            cancel_event,
+            self.plugin.get_continuous_deployment_environments_available,
+            args=(None, repo_name),
             )
 
     async def trigger_continuous_deployment(self, repo_name, environment, version):
@@ -100,29 +140,12 @@ class Context:
             self.session, repo_name, environment, version
             )
 
-        self._client.scheduler.notify((Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name))
+        await sleep(10)
+        await self._client.scheduler.notify(
+            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name)
+            )
 
         return result
-
-    async def get_continuous_deployment_environments_available(self, repo_name):
-        return await self.plugin.get_continuous_deployment_environments_available(
-            self.session, repo_name
-            )
-
-    async def watch_continuous_deployment_environments_available(
-            self, repo_name, poll_interval: int, *args, **kwargs
-            ):
-        # await self.accesscontrol(
-        #     repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
-        #     )
-
-        return self._client.scheduler.watch(
-            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repo_name,),
-            poll_interval,
-            self.plugin.get_continuous_deployment_environments_available,
-            args=(None, repo_name, *args,),
-            kwargs=kwargs
-            )
 
     # TODO: remove this method (unused)
     async def bridge_repository_to_namespace(
@@ -139,7 +162,9 @@ class Context:
         result = await self.plugin.add_repository(
             self.session, self._client.provision, repository, template, template_params, )
 
-        self._client.scheduler.notify((Context.UUID_WATCH_REPOSITORIES, self.session_id))
+        await self._client.scheduler.notify(
+            (Context.UUID_WATCH_REPOSITORIES, self.session_id)
+            )
 
         return result
 

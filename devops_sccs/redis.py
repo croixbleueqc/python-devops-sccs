@@ -7,8 +7,7 @@ from typing import Any
 
 import dill
 from loguru import logger
-from redis.asyncio import Redis
-from redis.asyncio.connection import BlockingConnectionPool  # will block and wait rather than raise an exception if a client tries to connect and the pool is full
+from redis import Redis
 
 from devops_sccs.plugins.cache_keys import CacheKeyFn
 
@@ -28,39 +27,35 @@ class Serializer:
 
     @staticmethod
     def serialize(value: Any) -> bytes:
-        serialized = value
-        if Serializer.needs_pickling(value):
-            try:
-                serialized = pickle.dumps(value)
-            except AttributeError:
-                serialized = dill.dumps(value)  # slower than pickle, but can handle more types
+        try:
+            serialized = pickle.dumps(value)
+        except AttributeError:
+            serialized = dill.dumps(value)  # slower than pickle, but can handle more types
         return serialized
 
     @staticmethod
     def deserialize(value) -> Any:
-        deserialized = value
-        if Serializer.needs_unpickling(value):
-            try:
-                deserialized = pickle.loads(value)
-            except (pickle.UnpicklingError, AttributeError):
-                deserialized = dill.loads(value)
+        if value is None:
+            return None
+        try:
+            deserialized = pickle.loads(value)
+        except (pickle.UnpicklingError, AttributeError, TypeError):
+            deserialized = dill.loads(value)
         return deserialized
 
 
 class RedisCache:
-    """Basic singleton wrapper for redis client"""
+    """Basic singleton wrapper for redis client.  Pickles/Dills everything."""
     _cache = None
+    redis = None
+    _is_initialized = False
 
     def __new__(cls, *args, **kwargs):
         if not cls._cache:
             cls._cache = super().__new__(cls)
         return cls._cache
 
-    def __init__(self):
-        self.client = None
-        self._is_initialized = False
-
-    async def init(self):
+    def init(self):
         if self._is_initialized:
             return
 
@@ -68,78 +63,50 @@ class RedisCache:
             redis_password = os.environ['REDIS_PASSWORD']
             redis_host = os.environ.get('REDIS_HOST', 'localhost')
 
-            redis_url = f'redis://:{redis_password}@{redis_host}:6379/0'
-            self.client = Redis(
-                connection_pool=BlockingConnectionPool.from_url(redis_url),
-                decode_responses=True  # binary data otherwise
-                )
-            await self.client.initialize()
-            await self.client.ping()  # test connection
+            # redis_url = f'redis://:{redis_password}@{redis_host}:6379/0'
+            self.redis = Redis(redis_host, password=redis_password, decode_responses=False)
+            assert self.redis.ping()
         except Exception as e:
             logger.critical(e)
-            self.client = None
+            self.redis = None
             raise e
 
+        logger.debug("REDIS CACHE initialized")
         self._is_initialized = True
 
-    async def set(self, key, value, ttl=timedelta(hours=1)) -> bool:
+    def set(self, key, value, ttl=timedelta(hours=1)) -> bool:
         value = Serializer.serialize(value)
-        return await self.client.set(key, value, ex=ttl)
+        success = self.redis.set(key, value, ex=ttl)
+        if success:
+            logger.debug(f'REDIS CACHE SET for "{key}"')
+        return success
 
-    async def get(self, key, default=None) -> Any:
-        value = await self.client.get(key)
+    def get(self, key, default=None) -> Any:
+        value = self.redis.get(key)
         if value is None:
+            logger.debug(f'REDIS CACHE MISS for "{key}"')
             return default
-        return Serializer.deserialize(value)
-
-    async def pop(self, key) -> Any:
-        value = await self.get(key)
-        await self.delete(key)
+        value = Serializer.deserialize(value)
+        logger.debug(f'REDIS CACHE HIT for "{key}"')
         return value
 
-    async def exists(self, key) -> bool:
-        return await self.client.exists(key)
+    def exists(self, key) -> bool:
+        return self.redis.exists(key) > 0
 
-    async def delete(self, *keys) -> int:
-        return await self.client.delete(*keys)
-
-    async def hexists(self, key, field) -> bool:
-        return await self.client.hexists(key, field)
-
-    async def hset(self, key, field, value):
-        value = Serializer.serialize(value)
-        return await self.client.hset(key, field, value)
-
-    async def hget(self, key, field, default=None):
-        value = await self.client.hget(key, field)
-        if value is None:
-            return default
-        return Serializer.deserialize(value)
-
-    async def hgetall(self, key):
-        values = await self.client.hgetall(key)
-        return {int(k): Serializer.deserialize(v) for k, v in values.items()}
-
-    async def hpop(self, key, field) -> Any:
-        value = await self.hget(key, field)
-        await self.client.hdel(key, field)
-        return value
-
-    async def hkeys(self, key) -> list[int]:
-        return list(map(lambda k: int(k), await self.client.hkeys(key)))
-
-    async def hscan_iter(self, key):
-        async for key, value in self.client.hscan_iter(key):
-            yield int(key), Serializer.deserialize(value)
-
-    async def delete_namespace(self, namespace) -> int:
-        n = 0
-        async for key in self.client.scan_iter(f"{namespace}*"):
-            n += await self.delete(key)
+    def delete(self, *keys) -> int:
+        n = self.redis.delete(*keys)
+        logger.debug(f"REDIS CACHE DELETE {n} keys for {keys}")
         return n
 
-    async def clear(self):
-        await self.client.flushall()
+    def delete_namespace(self, namespace) -> int:
+        n = 0
+        for key in self.redis.scan_iter(f"{namespace}*"):
+            n += self.delete(key)
+        return n
+
+    def clear(self):
+        logger.debug("REDIS CACHE CLEAR")
+        self.redis.flushall()
 
     @property
     def initialized(self):
@@ -165,7 +132,7 @@ def cache(
         async def _async_wrapper(_self, *args, fetch: bool, **kwargs):
             _cache = RedisCache()
             if not _cache.initialized:
-                await _cache.init()
+                _cache.init()
 
             # key
             _key = None
@@ -183,17 +150,14 @@ def cache(
 
             if fetch:
                 logger.debug(f'REDIS CACHE: fetch flag set, deleting cached value')
-                n = await _cache.delete(_key)
-                logger.debug(f'REDIS CACHE: deleted {n} keys')
+                n = _cache.delete(_key)
 
-            cached = await _cache.get(_key)
+            cached = _cache.get(_key)
             if cached is not None:
-                logger.debug(f'REDIS CACHE HIT for key {_key}')
                 return cached
 
-            logger.debug(f'REDIS CACHE MISS for key {_key}')
             result = await method(_self(), *args, **kwargs)
-            await _cache.set(_key, result, ttl=ttl)
+            _cache.set(_key, result, ttl=ttl)
             return result
 
         @functools.wraps(method)

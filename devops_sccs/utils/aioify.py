@@ -19,7 +19,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps, partial
-from typing import Callable, TypeVar
+from typing import TypeVar
 
 _coreaioify = None
 
@@ -90,8 +90,3 @@ class CoreAioify(object):
 
 
 T = TypeVar("T")
-
-
-async def run_async(func: Callable[..., T], *args, **kwargs) -> T:
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, partial(func, *args, **kwargs))

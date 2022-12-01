@@ -41,7 +41,6 @@ import pygit2
 
 from .errors import AnswerRequired, AnswerValidatorFailure, AuthorSyntax, SccsException
 from .schemas.config import ProvisionConfig, RepositoryContract, RepoContractConfig, TemplateSetup
-from .utils.aioify import aioify, cleanupCoreAiofy, getCoreAioify
 
 
 class Provision(object):
@@ -55,10 +54,11 @@ class Provision(object):
         self.templates = config.templates
         self.templates_contract_cache = self.generate_contract_templates()
 
-        getCoreAioify().create_thread_pool(self.POOL, max_workers=max_workers)
+        # getCoreAioify().create_thread_pool(self.POOL, max_workers=max_workers)
 
     def cleanup(self):
-        cleanupCoreAiofy(self.POOL)
+        # cleanupCoreAiofy(self.POOL)
+        pass
 
     def create_git_credential(self, user, pub, key, author):
         return GitCredentials(user, pub, key, author)
@@ -303,7 +303,6 @@ class Provision(object):
 
         return cmd
 
-    @aioify(pool=POOL)
     def provision(
             self,
             destination,
