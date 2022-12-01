@@ -75,7 +75,7 @@ class Watcher:
             await self.start()
         elif len(self.streams) > 0:
             for event in self.get_watcher_cache_values_as_events():
-                await self.dispatch_event(event)
+                await send_stream.send(event)
 
     async def unsubscribe(self, send_stream: MemoryObjectSendStream):
         try:
