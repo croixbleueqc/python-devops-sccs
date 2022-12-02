@@ -184,6 +184,7 @@ class BitbucketCloud(SccsApi):
                     typing_repo.Repository(
                         key=hash(repo["repository"]["name"]),
                         name=repo["repository"]["name"],
+                        full_name=repo["repository"]["full_name"],
                         permission=repo["permission"], )
                     )
             return result
