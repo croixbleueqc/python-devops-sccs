@@ -180,11 +180,13 @@ class BitbucketCloud(SccsApi):
                     "user/permissions/repositories", params={"pagelen": 100}
                     ):
                 assert isinstance(repo, dict)
+                full_name = repo["repository"]["full_name"]
+                slug = full_name.split("/")[1]
                 result.append(
                     typing_repo.Repository(
                         key=hash(repo["repository"]["name"]),
                         name=repo["repository"]["name"],
-                        full_name=repo["repository"]["full_name"],
+                        slug=slug,
                         permission=repo["permission"], )
                     )
             return result

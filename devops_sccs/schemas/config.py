@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Pattern
 
 from pydantic import BaseModel, Field, Extra, EmailStr
 
@@ -76,6 +76,7 @@ class PluginConfig(BaseModel, extra=Extra.allow):
     continuous_deployment: ContinuousDeployment
     storage: Storage
     escalation: dict[str, EscalationDetails]
+    blacklist: list[Pattern] = []
 
 
 class Plugins(BaseModel):
