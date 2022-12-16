@@ -35,8 +35,8 @@ class Context:
         self.plugin = plugin
         self._client = client
 
-    async def accesscontrol(self, repository, action):
-        return await self.plugin.accesscontrol(self.session, repository, action)
+    async def accesscontrol(self, repo_slug: str, action):
+        return await self.plugin.accesscontrol(self.session, repo_slug, action)
 
     async def passthrough(self, request):
         return await self.plugin.passthrough(self.session, request)
@@ -44,14 +44,14 @@ class Context:
     async def get_repositories(self):
         return await self.plugin.get_repositories(self.session)
 
-    async def get_repository(self, repo_name):
-        return await self.plugin.get_repository(self.session, repo_name)
+    async def get_repository(self, repo_slug: str):
+        return await self.plugin.get_repository(self.session, repo_slug)
 
-    async def get_continuous_deployment_config(self, repo_name, environments=None):
+    async def get_continuous_deployment_config(self, repo_slug, environments=None):
         if environments is None:
             environments = []
         return await self.plugin.get_continuous_deployment_config(
-            self.session, repo_name, environments
+            self.session, repo_slug, environments
             )
 
     async def get_continuous_deployment_versions_available(self, repository):
@@ -59,9 +59,9 @@ class Context:
             self.session, repository
             )
 
-    async def get_continuous_deployment_environments_available(self, repo_name):
+    async def get_continuous_deployment_environments_available(self, repo_slug):
         return await self.plugin.get_continuous_deployment_environments_available(
-            self.session, repo_name
+            self.session, repo_slug
             )
 
     async def watch_repositories(
@@ -84,16 +84,16 @@ class Context:
             poll_interval: int,
             send_stream: MemoryObjectSendStream,
             cancel_event: Event,
-            repo_name: str,
+            repo_slug: str,
             environments: list,
             ):
         await self._client.scheduler.watch(
-            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name),
+            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_slug),
             poll_interval,
             send_stream,
             cancel_event,
             self.plugin.get_continuous_deployment_config,
-            args=(None, repo_name, environments),
+            args=(None, repo_slug, environments),
             event_filter=lambda e: not environments or e.value.environment in environments
             )
 
@@ -102,17 +102,17 @@ class Context:
             poll_interval: int,
             send_stream: MemoryObjectSendStream,
             cancel_event: Event,
-            repo_name: str,
+            repo_slug: str,
             ):
         # await self.accesscontrol(repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE)
 
         await self._client.scheduler.watch(
-            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repo_name),
+            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_VERSIONS_AVAILABLE, repo_slug),
             poll_interval,
             send_stream,
             cancel_event,
             self.plugin.get_continuous_deployment_versions_available,
-            args=(None, repo_name),
+            args=(None, repo_slug),
             )
 
     async def watch_continuous_deployment_environments_available(
@@ -120,39 +120,39 @@ class Context:
             poll_interval: int,
             send_stream: MemoryObjectSendStream,
             cancel_event: Event,
-            repo_name,
+            repo_slug,
             ):
         # await self.accesscontrol(
         #     repo_name, Action.WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE
         #     )
 
         await self._client.scheduler.watch(
-            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repo_name,),
+            (Context.UUID_WATCH_CONTINUOUS_DEPLOYMENT_ENVIRONMENTS_AVAILABLE, repo_slug,),
             poll_interval,
             send_stream,
             cancel_event,
             self.plugin.get_continuous_deployment_environments_available,
-            args=(None, repo_name),
+            args=(None, repo_slug),
             )
 
-    async def trigger_continuous_deployment(self, repo_name, environment, version):
+    async def trigger_continuous_deployment(self, repo_slug, environment, version):
         result = await self.plugin.trigger_continuous_deployment(
-            self.session, repo_name, environment, version
+            self.session, repo_slug, environment, version
             )
 
         await sleep(10)
         await self._client.scheduler.notify(
-            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_name)
+            (Context.UUID_WATCH_CONTINOUS_DEPLOYMENT_CONFIG, repo_slug)
             )
 
         return result
 
     # TODO: remove this method (unused)
     async def bridge_repository_to_namespace(
-            self, repo_name: str, environment: str, untrustable=True
+            self, repo_slug: str, environment: str, untrustable=True
             ):
         return await self.plugin.bridge_repository_to_namespace(
-            self.session, repo_name, environment, untrustable
+            self.session, repo_slug, environment, untrustable
             )
 
     async def get_add_repository_contract(self):
@@ -168,8 +168,8 @@ class Context:
 
         return result
 
-    async def delete_repository(self, repo_name):
-        return await self.plugin.delete_repository(self.session, repo_name)
+    async def delete_repository(self, repo_slug):
+        return await self.plugin.delete_repository(self.session, repo_slug)
 
     async def compliance(self, remediation=False, report=False):
         return await self.plugin.compliance(self.session, remediation, report)
@@ -177,27 +177,27 @@ class Context:
     async def compliance_report(self):
         return await self.plugin.compliance_report(self.session)
 
-    async def compliance_repository(self, repo_name, remediation=False, report=False):
-        return await self.plugin.compliance_repository(self.session, repo_name, remediation, report)
+    async def compliance_repository(self, repo_slug, remediation=False, report=False):
+        return await self.plugin.compliance_repository(self.session, repo_slug, remediation, report)
 
-    async def compliance_report_repository(self, repo_name):
-        return await self.plugin.compliance_report_repository(self.session, repo_name)
+    async def compliance_report_repository(self, repo_slug):
+        return await self.plugin.compliance_report_repository(self.session, repo_slug)
 
-    async def get_webhook_subscriptions(self, repo_name: str):
-        return await self.plugin.get_webhook_subscriptions(self.session, repo_name)
+    async def get_webhook_subscriptions(self, repo_slug: str):
+        return await self.plugin.get_webhook_subscriptions(self.session, repo_slug)
 
-    async def create_webhook_subscription(self, repo_name, url, active, events, description):
+    async def create_webhook_subscription(self, repo_slug, url, active, events, description):
         return await self.plugin.create_webhook_subscription_for_repo(
-            self.session, repo_name, url, active, events, description
+            self.session, repo_slug, url, active, events, description
             )
 
-    async def delete_webhook_subscription(self, repo_name, subscription_id):
+    async def delete_webhook_subscription(self, repo_slug, subscription_id):
         return await self.plugin.delete_webhook_subscription(
-            self.session, repo_name, subscription_id
+            self.session, repo_slug, subscription_id
             )
 
     async def get_projects(self):
         return await self.plugin.get_projects(self.session)
 
-    async def get_repository_permission(self, repo_name):
-        return await self.plugin.get_repository_permission(self.session, repo_name)
+    async def get_repository_permission(self, repo_slug):
+        return await self.plugin.get_repository_permission(self.session, repo_slug)

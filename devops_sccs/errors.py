@@ -54,8 +54,8 @@ class TriggerCdNotSupported(SccsException):
 
 
 class TriggerCdEnvUnsupported(SccsException):
-    def __init__(self, repository, environment):
-        super().__init__(f"Environment {environment} is not supported for {repository}")
+    def __init__(self, repo_slug, environment):
+        super().__init__(f"Environment {environment} is not supported for {repo_slug}")
 
 
 class TriggerCdVersionUnsupported(SccsException):

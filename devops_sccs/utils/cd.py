@@ -31,7 +31,7 @@ from ..typing.cd import EnvironmentConfig, Available
 def trigger_prepare(
         continuous_deployment: EnvironmentConfig,
         versions_available: list[Available],
-        repository: str,
+        repo_slug: str,
         environment: str,
         version: str,
         ):
@@ -42,7 +42,7 @@ def trigger_prepare(
     Args:
         continuous_deployment(typing.cd.EnvironmentConfig): The configuration
         versions_available(list(typing.cd.Available)): List of versions available
-        repository(str): the repository name
+        repo_slug(str): the repository name
         environment(str): the environment (eg: production, development, qa, ...)
         version(str): version to deploy
 
@@ -51,18 +51,18 @@ def trigger_prepare(
     """
 
     if continuous_deployment.readonly:
-        raise TriggerCdReadOnly(repository, environment)
+        raise TriggerCdReadOnly(repo_slug, environment)
 
     if continuous_deployment.version == version:
-        raise TriggerCdVersionAlreadyDeployed(repository, environment, version)
+        raise TriggerCdVersionAlreadyDeployed(repo_slug, environment, version)
 
     for available in versions_available:
         if available.version == version:
             return continuous_deployment, available
 
-    raise TriggerCdVersionUnsupported(repository, version)
+    raise TriggerCdVersionUnsupported(repo_slug, version)
 
 
-def trigger_not_supported(repository, environment):
+def trigger_not_supported(repo_slug: str, environment: str):
     """Trigger Continuous Deployment is not supported for this repository/environment"""
-    raise TriggerCdEnvUnsupported(repository, environment)
+    raise TriggerCdEnvUnsupported(repo_slug, environment)

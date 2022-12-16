@@ -145,7 +145,7 @@ class SccsApi(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def accesscontrol(self, session: Session, repo_name: str, action: Action):
+    async def accesscontrol(self, session: Session, repo_slug: str, action: Action):
         """Access Control
 
         Control if the action can be done for this repository on this session
@@ -190,7 +190,7 @@ class SccsApi(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_repository(self, session: Session, repo_name: str) -> Repository:
+    async def get_repository(self, session: Session, repo_slug: str) -> Repository:
         """Get a specific repository (with permission)
 
         Args:
@@ -233,7 +233,7 @@ class SccsApi(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def delete_repository(self, session: Session, repo_name: str):
+    async def delete_repository(self, session: Session, repo_slug: str):
         raise NotImplementedError()
 
     @abstractmethod
@@ -277,13 +277,13 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def trigger_continuous_deployment(
-            self, session: Session, repo_name: str, environment: str, version: str
+            self, session: Session, repo_slug: str, environment: str, version: str
             ) -> EnvironmentConfig:
         """Trigger a continuous deployment
 
         Args:
             session(object): the session
-            repo_name(str): the repository name
+            repo_slug(str): the repository name
             environment(str): the environment (eg: production, development, qa, ...)
             version(str): version to deploy
 
@@ -394,7 +394,7 @@ class SccsApi(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def compliance_report_repository(self, session, repo_name: str) -> dict:
+    async def compliance_report_repository(self, session, repo_slug: str) -> dict:
         """Provides a compliance report for the repository
 
         Returns:
@@ -407,14 +407,14 @@ class SccsApi(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_webhook_subscriptions(self, session, repo_name: str):
+    async def get_webhook_subscriptions(self, session, repo_slug: str):
         raise NotImplementedError()
 
     @abstractmethod
     async def create_webhook_subscription_for_repo(
             self,
             session: Session,
-            repo_name: str,
+            repo_slug: str,
             url: str,
             active: bool,
             events: list[WebhookEvent],
@@ -423,9 +423,9 @@ class SccsApi(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    async def delete_webhook_subscription(self, session, repo_name, subscription_id):
+    async def delete_webhook_subscription(self, session, repo_slug, subscription_id):
         raise NotImplementedError()
 
     @abstractmethod
-    async def get_repository_permission(selrf, session, repo_name) -> str | None:
+    async def get_repository_permission(self, session, repo_slug) -> str | None:
         raise NotImplementedError()

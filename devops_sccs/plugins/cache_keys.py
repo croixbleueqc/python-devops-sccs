@@ -105,6 +105,6 @@ class CacheKeyFn:
 cache_key_fns = {
     "get_continuous_deployment_config": CacheKeyFn(
         "get_continuous_deployment_config",
-        ["repo_name", "environments"],
+        ["repo_slug", "environments"],
         )
     }
