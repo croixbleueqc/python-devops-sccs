@@ -583,7 +583,7 @@ class BitbucketCloud(SccsApi):
         # get repository permissions for user
 
         try:
-            uuid = (await run_async(session.get, "2.0/user")).get("uuid")
+            uuid = (await run_async(session.get, "/user")).get("uuid")
             workspace = await self.api_workspace(session)
             user_permissions = await run_async(
                 workspace.get,
@@ -597,7 +597,7 @@ class BitbucketCloud(SccsApi):
     @cache(ttl=timedelta(days=1))
     async def get_projects(self, session: Cloud):
         """Return a list of projects"""
-        return await run_async(session.get, f"/2.0/workspaces/{self.team}/projects")
+        return await run_async(session.get, f"/workspaces/{self.team}/projects")
 
     @cache(ttl=timedelta(days=1))
     async def get_webhook_subscriptions(self, session: Cloud, repo_slug: str):
