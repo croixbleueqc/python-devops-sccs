@@ -40,7 +40,12 @@ import subprocess
 import pygit2
 
 from .errors import AnswerRequired, AnswerValidatorFailure, AuthorSyntax, SccsException
-from .schemas.config import ProvisionConfig, RepositoryContract, RepoContractConfig, TemplateSetup
+from .schemas.config import (
+    ProvisionConfig,
+    RepoContractConfig,
+    TemplateSetup,
+    ContractArg,
+    )
 
 
 class Provision(object):
@@ -63,7 +68,7 @@ class Provision(object):
     def create_git_credential(self, user, pub, key, author):
         return GitCredentials(user, pub, key, author)
 
-    def generate_contract_templates(self):
+    def generate_contract_templates(self) -> dict[str, dict[str, ContractArg]]:
         """Generate the contract part from a template (template.setup.args)"""
         ui_templates = {}
 
@@ -73,8 +78,8 @@ class Provision(object):
             # Setup part
             if template.setup.args is not None:
                 for arg, cfg in template.setup.args.items():
-                    ui[arg] = cfg.dict()
-                    del ui[arg]["arg"]  # ???
+                    ui[arg] = cfg
+                    # del ui[arg]["arg"]  # ???
 
             ui_templates[name] = ui
 
@@ -88,7 +93,9 @@ class Provision(object):
         return {
             "main": self.main_contract.dict(),
             "repository": self.repository_contract.dict(),
-            "templates": self.templates_contract_cache,
+            "templates": {k: {kk: vv.dict() for kk, vv in v.items()} for k, v
+                          in
+                          self.templates_contract_cache.items()},
             }
 
     def prepare_provision(self, repository_definition: dict, template: str, template_params: dict):
@@ -112,7 +119,7 @@ class Provision(object):
         if g is None:
             raise AnswerValidatorFailure("repository name", validator)
 
-        self.validate(self.repository_contract, repository_definition)
+        self.validate({k: v for k, v in self.repository_contract}, repository_definition)
 
         # Verify template (required or not and valid)
         if self.main_contract.template_required and not template:
@@ -142,7 +149,11 @@ class Provision(object):
         # return useful content to provision the new repository
         return repository_name, storage_definition, init_template_cmd
 
-    def validate(self, contract: RepositoryContract, repository_definition: dict):
+    def validate(
+            self,
+            contract: dict[str, ContractArg],
+            repository_definition: dict
+            ):
         """Validate answers regarding the contract
 
         Please read the README for more details about what a contract and answers look like.
@@ -169,7 +180,6 @@ class Provision(object):
             "helloworld": {
                 "type": "bool",
                 "description": "Remove helloworld",
-                "default": true,
                 "arg": {
                     "true": "-c",
                     "false": null
@@ -188,7 +198,7 @@ class Provision(object):
             contract (dict): The contract to fulfill
             repository_definition (dict): Answers to the contract
         """
-        for field_name, details in contract:
+        for field_name, details in contract.items():
             value = repository_definition.get(field_name)
 
             if value is None:
@@ -199,9 +209,9 @@ class Provision(object):
                 else:
                     continue
 
-            validator = details.dict().get("validator")
+            validator = details.validator
 
-            if validator:
+            if validator is not None:
                 g = re.match(validator, value)
                 if g is None:
                     raise AnswerValidatorFailure(field_name, validator)

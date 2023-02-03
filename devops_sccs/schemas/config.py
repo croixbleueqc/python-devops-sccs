@@ -13,18 +13,18 @@ class From(BaseModel):
     other_branches: list[str] = []
 
 
-class Arg(BaseModel):
+class ContractArg(BaseModel):
     type: str
     description: str
     required: bool = False
-    default: None | bool
+    default: Any | None
     validator: str | None
-    arg: str | dict[str, Any]
+    arg: str | dict[str, Any] | None
 
 
 class TemplateSetup(BaseModel):
     cmd: list[str] | None
-    args: dict[str, Arg] | None
+    args: dict[str, ContractArg] | None
 
 
 class Template(BaseModel):
@@ -95,13 +95,7 @@ class RepoContractProjectValue(BaseModel):
     key: str
 
 
-class RepoContractValue(BaseModel, extra=Extra.allow):
-    type: str
-    description: str
-    required: bool
-
-
-class RepoContractProject(RepoContractValue):
+class RepoContractProject(ContractArg):
     roleName: str
     values: list[RepoContractProjectValue]
 
@@ -111,13 +105,13 @@ class RepoContractConfigValue(BaseModel):
     key: str
 
 
-class RepoContractConfig(RepoContractValue):
+class RepoContractConfig(ContractArg):
     default: int
     roleName: str
     values: list[RepoContractConfigValue]
 
 
-class RepoContractPrivileges(RepoContractValue):
+class RepoContractPrivileges(ContractArg):
     roleName: str
     values: list[RepoContractConfigValue]
 

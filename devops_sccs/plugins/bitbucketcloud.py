@@ -22,7 +22,7 @@ from atlassian.bitbucket import Cloud
 from atlassian.bitbucket.cloud.repositories import Repository
 from atlassian.bitbucket.cloud.repositories.pipelines import Pipeline
 from atlassian.bitbucket.cloud.repositories.refs import Branch
-from atlassian.bitbucket.cloud.workspaces import Workspace
+from atlassian.bitbucket.cloud.workspaces import Projects, Workspace
 from atlassian.rest_client import AtlassianRestAPI
 from requests import HTTPError
 
@@ -166,7 +166,7 @@ class BitbucketCloud(SccsApi):
     async def passthrough(self, session: Cloud, request):
         return await super().passthrough(session, request)
 
-    @cache(ttl=timedelta(days=1))
+    @cache(ttl=timedelta(days=1), key="repositories")
     async def get_repositories(
             self, session: Cloud | None
             ) -> list[typing_repo.Repository]:
@@ -176,18 +176,21 @@ class BitbucketCloud(SccsApi):
 
         def get_repos_sync():
             result: list[typing_repo.Repository] = []
-            for repo in session._get_paged(
+            for repository_permission in session._get_paged(
                     "user/permissions/repositories", params={"pagelen": 100}
                     ):
-                assert isinstance(repo, dict)
-                full_name = repo["repository"]["full_name"]
-                slug = full_name.split("/")[1]
+                assert isinstance(repository_permission, dict)
+                repository = repository_permission["repository"]
+                full_name = repository["full_name"]
+
                 result.append(
                     typing_repo.Repository(
-                        key=hash(repo["repository"]["name"]),
-                        name=repo["repository"]["name"],
-                        slug=slug,
-                        permission=repo["permission"], )
+                        key=hash(repository_permission["repository"]["name"]),
+                        name=repository["name"],
+                        slug=full_name.split("/")[1],
+                        url=repository["links"]["html"]["href"],
+                        permission=repository_permission["permission"],
+                        )
                     )
             return result
 
@@ -595,7 +598,7 @@ class BitbucketCloud(SccsApi):
             return None
 
     @cache(ttl=timedelta(days=1))
-    async def get_projects(self, session: Cloud):
+    async def get_projects(self, session: Cloud) -> Projects:
         """Return a list of projects"""
         return await run_async(session.get, f"/workspaces/{self.team}/projects")
 
