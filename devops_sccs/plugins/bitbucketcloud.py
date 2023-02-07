@@ -518,6 +518,8 @@ class BitbucketCloud(SccsApi):
             repository: str,
             version: str,
             branch: str,
+            author: str,
+            date: str,
             config: Environment,
             pullrequest: str | None = None,
             # buildStatus: str = "SUCCESSFUL",
@@ -530,6 +532,8 @@ class BitbucketCloud(SccsApi):
             key=hash((repository, branch)),
             version=version,
             environment=config.name,
+            author=author,
+            date=date,
             readonly=not trigger_config.get("enabled", True),
             pullrequest=pullrequest if trigger_config.get("pullrequest", False) else None, )
         return env
@@ -577,8 +581,15 @@ class BitbucketCloud(SccsApi):
 
             await run_async(pr_sync)
 
+        try:
+            author = branch.data["target"]["author"]["user"]["display_name"]
+        except KeyError:
+            author = branch.data["target"]["author"]["raw"]
+
+        date = branch.data["target"]["date"]
+
         return (branch.name, BitbucketCloud.create_continuous_deployment_config_by_branch(
-            repo.slug, version, branch.name, config, pullrequest_link
+            repo.slug, version, branch.name, author, date, config, pullrequest_link
             ))
 
     @cache(ttl=timedelta(days=1))

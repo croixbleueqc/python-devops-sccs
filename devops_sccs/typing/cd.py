@@ -36,6 +36,8 @@ class EnvironmentConfig(WatcherType):
     version: str
     readonly: bool = False
     pullrequest: str | None = None
+    author: str | None
+    date: str | None
 
     def __eq__(self, other):
         if not isinstance(other, EnvironmentConfig):
