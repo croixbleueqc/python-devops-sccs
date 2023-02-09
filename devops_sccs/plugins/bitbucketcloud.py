@@ -64,7 +64,7 @@ class BitbucketCloud(SccsApi):
                 user=config.watcher.user,
                 author=f"Admin User <{config.watcher.email}>",
                 apikey=config.watcher.pwd, )
-            self.watcher = Cloud(
+            self.admin_session = Cloud(
                 username=self.watcher_user.user, password=self.watcher_user.apikey, cloud=True, )
         except KeyError:
             logging.error("Watcher credentials are missing from the configuration file.")
@@ -83,7 +83,7 @@ class BitbucketCloud(SccsApi):
 
     def get_session_id(self, credentials: Credentials | Cloud | None) -> int:
         if credentials is None:
-            return hash((self.watcher.username, self.watcher.password))
+            return hash((self.admin_session.username, self.admin_session.password))
         elif isinstance(credentials, Cloud):
             return hash((credentials.username, credentials.password))
         elif isinstance(credentials, Credentials):
@@ -105,7 +105,7 @@ class BitbucketCloud(SccsApi):
             shared_sessions=1,
             session=Cloud(
                 username=credentials.user, password=credentials.apikey, cloud=True
-                ) if credentials is not None else self.watcher,
+                ) if credentials is not None else self.admin_session,
             credentials=credentials if credentials is not None else self.watcher_user, )
 
         self.local_sessions[session_id] = stored
@@ -151,7 +151,7 @@ class BitbucketCloud(SccsApi):
         return super().__new__(cls)
 
     @cache(ttl=timedelta(weeks=1))
-    async def accesscontrol(self, session: Cloud, repo_slug: str, action: int):
+    async def accesscontrol(self, session: Cloud, repo_slug: str, action: int = 0):
         """see plugin.py"""
         # will raise an HTTPError if access is forbidden
         try:
@@ -172,7 +172,7 @@ class BitbucketCloud(SccsApi):
             ) -> list[typing_repo.Repository]:
         """see plugin.py"""
         if session is None:
-            session = self.watcher
+            session = self.admin_session
 
         def get_repos_sync():
             result: list[typing_repo.Repository] = []
@@ -218,6 +218,7 @@ class BitbucketCloud(SccsApi):
 
     async def get_api_repository(self, session: Cloud, repo_slug: str) -> Repository | None:
         """Returns an unmodified Repository object as returned by the API"""
+        await self.accesscontrol(session, repo_slug)
 
         workspace = await self.api_workspace(session)
 
@@ -252,8 +253,8 @@ class BitbucketCloud(SccsApi):
         """
         if environments is None:
             environments = []
-        if session is None:
-            session = self.watcher
+
+        session = self.admin_session
 
         repo = await self.get_api_repository(session, repo_slug)
         if repo is None:
@@ -293,16 +294,13 @@ class BitbucketCloud(SccsApi):
     @cache(ttl=timedelta(days=1))
     async def get_continuous_deployment_versions_available(
             self,
-            session: Cloud | None,
             repo_slug: str
             ) -> list[typing_cd.Available]:
         """
         Get the list of version available to deploy
         """
-        if session is None:
-            session = self.watcher
+        session = self.admin_session
 
-        self.__log_session(session)
         versions: list[typing_cd.Available] = []
 
         repo = await self.get_api_repository(session, repo_slug)
@@ -332,7 +330,11 @@ class BitbucketCloud(SccsApi):
                 try:
                     result_name = state["result"]["name"]
                 except KeyError:
-                    raise SccsException(f"Unexpected pipeline state: {state['name']}")
+                    logging.warning(f"Unexpected pipeline state: {state['name']}")
+                    # TODO handle this error. Typically we see this exception when state["name"] ==
+                    # "IN_PROGESS" which could be useful information to pass along to the caller
+                    # although it falls outside the mandate of the current function.
+                    continue
                 if ref_name in self.cd_versions_available and result_name == "SUCCESSFUL":
                     available = typing_cd.Available(
                         key=hash((repo_slug, pipeline.build_number)),
@@ -348,8 +350,7 @@ class BitbucketCloud(SccsApi):
     async def get_continuous_deployment_environments_available(
             self, session: Cloud | None, repo_slug: str
             ) -> list[typing_cd.EnvironmentConfig]:
-        if session is None:
-            session = self.watcher
+        session = self.admin_session
 
         envs: list[typing_cd.EnvironmentConfig] = []
 
@@ -377,6 +378,8 @@ class BitbucketCloud(SccsApi):
         """
         Trigger a deployment in a specific environment
         """
+        await self.accesscontrol(session, repo_slug)
+
         logging.info(f"TRIGGER CD of {version} in {environment} for {repo_slug}")
 
         # Get Continuous Deployment configuration for the environment requested
@@ -394,7 +397,7 @@ class BitbucketCloud(SccsApi):
         continuous_deployment: typing_cd.EnvironmentConfig
         try:
             continuous_deployment = (await self.get_continuous_deployment_config(
-                self.watcher, repo_slug, [environment], fetch=True
+                self.admin_session, repo_slug, [environment], fetch=True
                 ))[0]
         except IndexError:
             logging.warning(
@@ -403,7 +406,7 @@ class BitbucketCloud(SccsApi):
             raise TriggerCdEnvUnsupported(repo_slug, environment)
 
         versions_available = await self.get_continuous_deployment_versions_available(
-            self.watcher, repo_slug, fetch=True
+            repo_slug, fetch=True
             )
 
         utils_cd.trigger_prepare(
@@ -473,7 +476,7 @@ class BitbucketCloud(SccsApi):
             # Continuous Deployment is done with a PR.
             pr = await run_async(
                 repo.pullrequests.create,
-                title=f"Ugrade {environment} {self.cd_pullrequest_tag}",
+                title=f"Upgrade {environment} {self.cd_pullrequest_tag}",
                 source_branch=deploy_branch_name,
                 destination_branch=branch_name,
                 close_source_branch=True
@@ -597,11 +600,9 @@ class BitbucketCloud(SccsApi):
         # get repository permissions for user
 
         try:
-            uuid = (await run_async(session.get, "/user")).get("uuid")
-            workspace = await self.api_workspace(session)
             user_permissions = await run_async(
-                workspace.get,
-                f"/{repo_slug}/premissions-config/users/{uuid}"
+                session.get,
+                f"repositories/{self.team}/{repo_slug}/permissions-config/users/{session.username}"
                 )
             return user_permissions.get("permission")
         except HTTPError as e:

@@ -56,7 +56,7 @@ class Context:
 
     async def get_continuous_deployment_versions_available(self, repo_slug):
         return await self.plugin.get_continuous_deployment_versions_available(
-            self.session, repo_slug
+            repo_slug
             )
 
     async def get_continuous_deployment_environments_available(self, repo_slug):

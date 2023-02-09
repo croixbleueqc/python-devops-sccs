@@ -257,7 +257,7 @@ class SccsApi(ABC):
 
     @abstractmethod
     async def get_continuous_deployment_versions_available(
-            self, session, repository
+            self, repository
             ) -> list[Available]:
         """Get continuous deployment versions available
 
@@ -267,7 +267,6 @@ class SccsApi(ABC):
             This is a list of versions that can be used to trigger a continuous deployment
 
             Args:
-                session(object): the session
                 repository(str): the repository name
 
             Returns:
