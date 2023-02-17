@@ -27,14 +27,14 @@ from atlassian.rest_client import AtlassianRestAPI
 from requests import HTTPError
 
 from devops_console.schemas import WebhookEvent
-from devops_sccs.schemas.config import Environment, PluginConfig
+from devops_sccs.schemas.config import EnvironmentConfiguration, PluginConfig
 from .cache_keys import cache_key_fns
 from ..accesscontrol import Action, Permission
 from ..client import register_plugin, SccsClient
 from ..errors import SccsException, TriggerCdEnvUnsupported
 from ..plugin import SccsApi, StoredSession
 from ..provision import Provision
-from ..redis import cache
+from ..redis import cache_async
 from ..typing import cd as typing_cd, repositories as typing_repo
 from ..typing.credentials import Credentials
 from ..utils import cd as utils_cd
@@ -150,7 +150,7 @@ class BitbucketCloud(SccsApi):
     def __new__(cls):
         return super().__new__(cls)
 
-    @cache(ttl=timedelta(weeks=1))
+    @cache_async(ttl=timedelta(weeks=1))
     async def accesscontrol(self, session: Cloud, repo_slug: str, action: int = 0):
         """see plugin.py"""
         # will raise an HTTPError if access is forbidden
@@ -166,7 +166,7 @@ class BitbucketCloud(SccsApi):
     async def passthrough(self, session: Cloud, request):
         return await super().passthrough(session, request)
 
-    @cache(ttl=timedelta(days=1), key="repositories")
+    @cache_async(ttl=timedelta(days=1), key="repositories")
     async def get_repositories(
             self, session: Cloud | None
             ) -> list[typing_repo.Repository]:
@@ -196,11 +196,11 @@ class BitbucketCloud(SccsApi):
 
         return await run_async(get_repos_sync)
 
-    @cache(ttl=timedelta(days=1))
+    @cache_async(ttl=timedelta(days=1))
     async def api_workspace(self, session: Cloud) -> Workspace:
         return await run_async(session.workspaces.get, self.team)
 
-    @cache(ttl=timedelta(days=1))
+    @cache_async(ttl=timedelta(days=1))
     async def get_repository(
             self,
             session: Cloud,
@@ -241,7 +241,7 @@ class BitbucketCloud(SccsApi):
             template_params
             )
 
-    @cache(
+    @cache_async(
         ttl=timedelta(days=1),
         key=cache_key_fns["get_continuous_deployment_config"],
         )
@@ -291,7 +291,7 @@ class BitbucketCloud(SccsApi):
 
         return results
 
-    @cache(ttl=timedelta(days=1))
+    @cache_async(ttl=timedelta(days=1))
     async def get_continuous_deployment_versions_available(
             self,
             repo_slug: str
@@ -346,7 +346,7 @@ class BitbucketCloud(SccsApi):
 
         return await run_async(get_versions_sync)
 
-    @cache(ttl=timedelta(days=1))
+    @cache_async(ttl=timedelta(days=1))
     async def get_continuous_deployment_environments_available(
             self, session: Cloud | None, repo_slug: str
             ) -> list[typing_cd.EnvironmentConfig]:
@@ -383,7 +383,7 @@ class BitbucketCloud(SccsApi):
         logging.info(f"TRIGGER CD of {version} in {environment} for {repo_slug}")
 
         # Get Continuous Deployment configuration for the environment requested
-        cd_environment_config: Environment
+        cd_environment_config: EnvironmentConfiguration
         for cd_environment in self.cd_environments:
             if cd_environment.name == environment:
                 cd_environment_config = cd_environment
@@ -523,7 +523,7 @@ class BitbucketCloud(SccsApi):
             branch: str,
             author: str,
             date: str,
-            config: Environment,
+            config: EnvironmentConfiguration,
             pullrequest: str | None = None,
             # buildStatus: str = "SUCCESSFUL",
             ) -> typing_cd.EnvironmentConfig:
@@ -542,7 +542,7 @@ class BitbucketCloud(SccsApi):
         return env
 
     async def get_continuous_deployment_config_by_branch(
-            self, repo: Repository, branch: Branch, config: Environment
+            self, repo: Repository, branch: Branch, config: EnvironmentConfiguration
             ) -> tuple[str, typing_cd.EnvironmentConfig]:
         """
         Get environment configuration for a specific branch
@@ -595,7 +595,7 @@ class BitbucketCloud(SccsApi):
             repo.slug, version, branch.name, author, date, config, pullrequest_link
             ))
 
-    @cache(ttl=timedelta(days=1))
+    @cache_async(ttl=timedelta(days=1))
     async def get_repository_permission(self, session: Cloud, repo_slug: str) -> str | None:
         # get repository permissions for user
 
@@ -609,12 +609,12 @@ class BitbucketCloud(SccsApi):
             logging.warning(f"Error getting repository permissions: {e}")
             return None
 
-    @cache(ttl=timedelta(days=1))
+    @cache_async(ttl=timedelta(days=1))
     async def get_projects(self, session: Cloud) -> Projects:
         """Return a list of projects"""
         return await run_async(session.get, f"/workspaces/{self.team}/projects")
 
-    @cache(ttl=timedelta(days=1))
+    @cache_async(ttl=timedelta(days=1))
     async def get_webhook_subscriptions(self, session: Cloud, repo_slug: str):
         repo = await self.get_api_repository(session, repo_slug)
         if repo is None:

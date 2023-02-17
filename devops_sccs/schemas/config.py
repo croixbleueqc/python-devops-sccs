@@ -38,7 +38,7 @@ class WatcherCreds(BaseModel):
     email: EmailStr | None = None
 
 
-class Environment(BaseModel):
+class EnvironmentConfiguration(BaseModel):
     name: str
     branch: str
     version: dict[str, str]
@@ -54,7 +54,7 @@ class Pipeline(BaseModel):
 
 
 class ContinuousDeployment(BaseModel):
-    environments: list[Environment]
+    environments: list[EnvironmentConfiguration]
     pullrequest: PullRequest
     pipeline: Pipeline
 

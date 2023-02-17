@@ -113,7 +113,7 @@ class RedisCache:
         return self._is_initialized
 
 
-def cache(
+def cache_async(
         ttl: timedelta,
         key: str | CacheKeyFn | None = None,
         namespace: str = "",
@@ -163,6 +163,62 @@ def cache(
         @functools.wraps(method)
         async def inner(self, *args, fetch=False, **kwargs):
             return await _async_wrapper(weakref.ref(self), *args, fetch=fetch, **kwargs)
+
+        return inner
+
+    return _decorator
+
+
+def cache_sync(
+        ttl: timedelta,
+        key: str | CacheKeyFn | None = None,
+        namespace: str = "",
+        ):
+    """Wrapper for caching **method**  results in redis.
+
+    Args:
+        ttl: time to live for the cached value
+        key: key to use for the cache. Can be an static string, a function or None. In the case of
+        a function, it is expected to have some, or all of the same arguments as the wrapped method.
+        namespace: prefix to use for the cache key. Useful for differentiating between different
+        instances of the same class, for example.
+    """
+
+    def _decorator(method):
+        def _wrapper(_self, *args, fetch: bool, **kwargs):
+            _cache = RedisCache()
+            if not _cache.initialized:
+                _cache.init()
+
+            # key
+            _key = None
+            if key is None:
+                _key = CacheKeyFn.make_default_key(method.__name__, *args, **kwargs)
+            elif isinstance(key, str):
+                _key = key
+            elif isinstance(key, CacheKeyFn):
+                _key = key.infer_from_orig(method, *args, **kwargs)
+            if _key is None:
+                raise ValueError('Invalid key')
+
+            if namespace:
+                _key = CacheKeyFn.prepend_namespace(namespace, _key)
+
+            if fetch:
+                logger.debug(f'REDIS CACHE: fetch flag set, deleting cached value')
+                n = _cache.delete(_key)
+
+            cached = _cache.get(_key)
+            if cached is not None:
+                return cached
+
+            result = method(_self(), *args, **kwargs)
+            _cache.set(_key, result, ttl=ttl)
+            return result
+
+        @functools.wraps(method)
+        def inner(self, *args, fetch=False, **kwargs):
+            return _wrapper(weakref.ref(self), *args, fetch=fetch, **kwargs)
 
         return inner
 
