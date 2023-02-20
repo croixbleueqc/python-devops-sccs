@@ -106,5 +106,9 @@ cache_key_fns = {
     "get_continuous_deployment_config": CacheKeyFn(
         "get_continuous_deployment_config",
         ["repo_slug", "environments"],
+        ),
+    "get_deployment_statuses": CacheKeyFn(
+        name="get_deployment_statuses",
+        kwarg_names=["slug", "accepted_environments"]
         )
     }
