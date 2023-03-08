@@ -21,37 +21,42 @@ Define standard typing to manage report, diverence, etc
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Typing2, Field
 from enum import Enum
 
-class CurrentExpected(Enum):
+from pydantic import BaseModel
+
+
+class CurrentExpected(str, Enum):
     SET = "set"
     UNSET = "unset"
-    MATCH  = "match"
+    MATCH = "match"
     UNMATCH = "unmatch"
     UNKNOWN = "unknown"
-    AVAILABE = "available"
+    AVAILABLE = "available"
     UNAVAILABLE = "unavailable"
 
-    def __str__(self):
-        return self.value
 
-class Divergence(Typing2):
-    rule = Field()
+class Divergence(BaseModel):
+    rule: str
 
     # current and expected are not limited to CurrentExpected class values
-    current = Field().converter(dumps=str)
-    expected = Field().converter(dumps=str)
+    current: CurrentExpected
+    expected: CurrentExpected
 
     def __eq__(self, other):
         if not isinstance(other, Divergence):
             return False
 
-        return self.rule == other.rule and str(self.current) == str(other.current) and str(self.expected) == str(other.expected)
+        return (
+                self.rule == other.rule
+                and str(self.current) == str(other.current)
+                and str(self.expected) == str(other.expected)
+        )
 
-class RepositoryDivergence(Typing2):
-    name = Field()
-    divergences = Field().list_of(inside_instanciator=Divergence)
+
+class RepositoryDivergence(BaseModel):
+    name: str
+    divergences: list[Divergence] = []
 
     def pre_loads(self, data):
         # Change the structure to move the key as the name field
@@ -61,16 +66,14 @@ class RepositoryDivergence(Typing2):
 
         return {
             "name": preload_data[0][0],
-            "divergences": preload_data[0][1]["divergences"]
-        }
+            "divergences": preload_data[0][1]["divergences"],
+            }
 
     def post_dumps(self, raw, dump):
         # Change the structure to move name as the key
         name = dump.pop("name")
         divergences = dump.pop("divergences")
-        dump[name] = {
-            "divergences": divergences
-        }
+        dump[name] = {"divergences": divergences}
 
     def isDivergences(self):
         return len(self.divergences) != 0

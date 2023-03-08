@@ -15,14 +15,14 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-from typing_engine.typing import Typing2
+from __future__ import annotations
 
-class WatcherTyping2(Typing2):
-    def __init__(self, key, data=None, parent=None):
-        self.key = key
-        Typing2.__init__(self, data=data, parent=parent)
+from typing import Any, Optional
 
-class HookTyping2(Typing2):
-    def __init__(self, key, data=None, parent=None):
-        self.key = key
-        Typing2.__init__(self, data=data, parent=parent)
+from pydantic import BaseModel
+
+
+class WatcherType(BaseModel):
+    key: int
+    data: Any | None = None
+    parent: "Optional[WatcherType]" = None

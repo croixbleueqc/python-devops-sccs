@@ -27,23 +27,37 @@ IMPORTANT: If you consider that some features are enough generic and can help ot
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-def init_plugin():
-    """
-    Entrypoint to register a plugin.
 
-    id has to be unique. You can't register 2 plugins with the same id
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import Any
 
-    Returns:
-        str,object: unique id, plugin instance
-    """
-    return "sccs", Sccs()
+from devops_console.schemas import WebhookEvent
+from devops_sccs.schemas.config import PluginConfig
+from .accesscontrol import Action
+from .provision import Provision
+from .typing.cd import Available, EnvironmentConfig
+from .typing.credentials import Credentials
+from .typing.repositories import Repository
 
-class Sccs(object):
+Session = object
+
+
+@dataclass
+class StoredSession:
+    id: int
+    shared_sessions: int
+    session: Session
+    credentials: Credentials
+
+
+class SccsApi(ABC):
     """
     Abstract class to create a plugin
     """
 
-    async def init(self, core,args):
+    @abstractmethod
+    async def init(self, core, config: PluginConfig):
         """
         Initialize the plugin
 
@@ -51,79 +65,87 @@ class Sccs(object):
         This is where you can initialize everything that is not relative to a session.
 
         Advanced examples:
-        - if you want to share some sessions across different instances, this is where you can init database, cache or whatever you want.
+        - if you want to share some sessions across different instances, this is where you can init database, cache or
+          whatever you want.
         - if you need a kind of root user to do some specific operations not available to a regular user,
           this is where you can store those informations to use them when required
-        
+
         Args:
             core(Core)    : Core library
-            args(dict)    : static configuration for the plugin
+            config(dict)    : static configuration for the plugin
         """
         raise NotImplementedError()
 
+    @abstractmethod
     async def cleanup(self):
         """
         Cleanup the plugin as it will be removed
         """
         raise NotImplementedError()
 
-    def get_session_id(self, args):
+    @abstractmethod
+    def get_session_id(self, credentials: Credentials | None) -> int:
         """
         Permit to generate the same session id for the same significant arguments.
-        
+
         session id is an abstract concept that can be used for advanced usages explained on open_session().
         It is totally acceptable to return None if you don't need it as the Core will not keep any trace of it.
         This is a purely internal plugin use.
 
         Args:
-            args(dict): extra configuration
-        
+            session(dict): extra configuration
+
         Returns:
             str: a session id
         """
         raise NotImplementedError()
 
-    async def open_session(self, session_id, args):
+    @abstractmethod
+    async def open_session(
+            self, session_id: int, credentials: Credentials | None = None
+            ) -> StoredSession:
         """
         Open a session
 
-        Session is an abstract concept that will be stored in a Core.Context. This is up to the plugin to define what should be a session.
-        
+        Session is an abstract concept that will be stored in a Core.Context. This is up to the plugin to define what
+        should be a session.
+
         A session can be :
         - nothing (None) if you want to use a global user (see root user usage in init())
-        - object that will identify a regular user (provided with args) to run as much as possible commands against your sccs with effective user credential
+        - object that will identify a regular user (provided with args) to run as much as possible commands against
+          your sccs with effective user credential
         - object like a library client instance on your specific sccs.
         - ...
-        
+
         Advanced example:
         - check if a session is alreday open in a cache/database/... system initialized for this plugin
         - if the session exists, return it instead of opening a new one
         - if it doesn't exist, open a new one and store it in the cache/database/...
 
         Simple example:
-        - just return args as the session. Args should include everything that will permit all other functions to query the sccs.
+        - just return args as the session. Args should include everything that will permit all other functions to query
+          the sccs.
 
         Extra easy example with a "root user":
-        - return None: we don't need anything as we will rely only on the root user / connection created in init() stage (for auditability and security you should not do that)
+        - return None: we don't need anything as we will rely only on the root user / connection created in init()
+          stage (for auditability and security you should not do that)
 
-        Args:
-            args(dict): extra arguments required to open a session
-        
         Returns:
             object|None: a session object
         """
         raise NotImplementedError()
 
-    async def close_session(self, session_id, session, args):
-        """Close a session
-        
-        Args:
-            session(object): the session
-            args(dict): extr arguments to handle the operation
-        """
+    async def get_stored_session(
+            self, session_id: int | None, session: Session | None = None
+            ) -> StoredSession | None:
         raise NotImplementedError()
 
-    async def accesscontrol(self, session, repository, action, args):
+    @abstractmethod
+    async def close_session(self, session_id: int):
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def accesscontrol(self, session: Session, repo_slug: str, action: Action):
         """Access Control
 
         Control if the action can be done for this repository on this session
@@ -132,14 +154,14 @@ class Sccs(object):
             session(object): the session
             repository(dict): Answers to a repository contract
             action(admission.Actions): Action requested
-            args(dict): extr arguments to handle the operation
 
         Exceptions:
             AccessForbidden: Access forbidden
         """
         raise NotImplementedError()
 
-    async def passthrough(self, session, request, args):
+    @abstractmethod
+    async def passthrough(self, session: Session, request: str) -> Any:
         """Passthrough
 
         Permit to support non standard operations. That can be see like a way to add proprietary APIs.
@@ -147,42 +169,49 @@ class Sccs(object):
         Args:
             session(object): the session
             request(str): the non standard request to perform
-            args(dict): extr arguments to handle the request
-        
+
         Returns:
             object: non standard answer
         """
         raise NotImplementedError()
 
-    async def get_repositories(self, session, args):
+    @abstractmethod
+    async def get_repositories(self, session: Session) -> list[Repository]:
         """Get a list of repositories (with permission for each)
 
         This list can be restricted to what is visible only based on requester's permissions.
 
         Args:
             session(object): the session
-            args(dict): extr arguments to handle the operation
-        
+
         Returns:
             list(typing.repositories.Repository): List of repository
         """
         raise NotImplementedError()
 
-    async def get_repository(self, session, repository, args):
+    @abstractmethod
+    async def get_repository(self, session: Session, repo_slug: str) -> Repository:
         """Get a specific repository (with permission)
 
         Args:
-            session(object): the session 
+            session(object): the session
             repository(str): the repository name
-            args(dict): extr arguments to handle the operation
-        
+
         Returns:
             typing.repositories.Repository: a repository
 
         """
         raise NotImplementedError()
 
-    async def add_repository(self, session, provision, repository, template, template_params, args):
+    @abstractmethod
+    async def add_repository(
+            self,
+            session: Session,
+            provision: Provision,
+            repo_definition: dict,
+            template: str,
+            template_params: dict,
+            ):
         """Add a new repository
 
         The main workflow is:
@@ -200,11 +229,17 @@ class Sccs(object):
             repository(dict): Answers to a repository contract
             template(str): Template to use
             template_params(dict): Answers to a template contract
-            args(dict): extr arguments to handle the operation
         """
         raise NotImplementedError()
 
-    async def get_continuous_deployment_config(self, session, repository, environments, args):
+    @abstractmethod
+    async def delete_repository(self, session: Session, repo_slug: str):
+        raise NotImplementedError()
+
+    @abstractmethod
+    async def get_continuous_deployment_config(
+            self, session: Session, repository, environments
+            ) -> list[EnvironmentConfig]:
         """Get continuous deployment configuration
 
         This is not the real state of the deployment in your "production" environment but the state expected
@@ -214,65 +249,77 @@ class Sccs(object):
             session(object): the session
             repository(str): the repository name
             environments(list(str)): filter to those environments only (None for all)
-            args(dict): extr arguments to handle the operation
 
         Returns:
             list(typing.cd.EnvironmentConfig): Configuration for filtered environments
         """
         raise NotImplementedError()
 
-    async def get_continuous_deployment_versions_available(self, session, repository, args):
+    @abstractmethod
+    async def get_continuous_deployment_versions_available(
+            self, repository
+            ) -> list[Available]:
         """Get continuous deployment versions available
 
-        This is a list of versions that can be used to trigger a continuous deployment
+        @abstractmethod
+        @abstractmethod
+        @abstractmethod
+            This is a list of versions that can be used to trigger a continuous deployment
 
-        Args:
-            session(object): the session
-            repository(str): the repository name
-            args(dict): extr arguments to handle the operation
+            Args:
+                repository(str): the repository name
 
-        Returns:
-            list(typing.cd.Available): Versions available
+            Returns:
+                list(typing.cd.Available): Versions available
         """
         raise NotImplementedError()
 
-    async def trigger_continuous_deployment(self, session, repository, environment, version, args):
+    @abstractmethod
+    async def trigger_continuous_deployment(
+            self, session: Session, repo_slug: str, environment: str, version: str
+            ) -> EnvironmentConfig:
         """Trigger a continuous deployment
 
         Args:
             session(object): the session
-            repository(str): the repository name
+            repo_slug(str): the repository name
             environment(str): the environment (eg: production, development, qa, ...)
             version(str): version to deploy
-            args(dict): extr arguments to handle the operation
 
         Returns:
             typing.cd.EnvironmentConfig: new configuration for the environment
         """
         raise NotImplementedError()
 
-    async def get_continuous_deployment_environments_available(self, session, repository, args):
+    @abstractmethod
+    async def get_continuous_deployment_environments_available(
+            self, session, repository
+            ) -> list[EnvironmentConfig]:
         """List all environments that can be used to run the application
 
         Args:
             session(object): the session
             repository(str): the repository name
-            args(dict): extr arguments to handle the operation
 
         Returns:
             list(typing.cd.EnvironmentConfig): list of environments
         """
         raise NotImplementedError()
 
-    async def bridge_repository_to_namespace(self, session, repository, environment, untrustable, args):
+    @abstractmethod
+    async def bridge_repository_to_namespace(
+            self, session, repository, environment, untrustable
+            ) -> dict:
         """Bridge repository/environment to a kubernetes namespace
 
         EXPERIMENTAL FEATURE
 
-        The bridge permit to provide the namespace associated with a repository. This API is really experimental because it assumes
-        that a repository equal one namepace. This is a wrong assumption and will need to be reviewed.
+        The bridge permit to provide the namespace associated with a repository. This API is really experimental
+        because it assumes that a repository equal one namepace. This is a wrong assumption and will need to be
+        reviewed.
 
-        This function will be called in an untrustable way by the kubernetes backend. Kubernetes backend will fully rely on sccs to validate the request.
+        This function will be called in an untrustable way by the kubernetes backend. Kubernetes backend will fully
+        rely on sccs to validate the request.
 
         Return dict object:
         {
@@ -287,15 +334,16 @@ class Sccs(object):
             session(object): the session
             repository(str): the repository name
             environment(str): the environment (eg: production, development, qa, ...)
-            unstrustable(bool): used to enforce controls on the plugin to distinguish a critical request from the kubernetes backend
-            args(dict): extr arguments to handle the operation
+            unstrustable(bool): used to enforce controls on the plugin to distinguish a critical request from the
+            kubernetes backend
 
         Returns:
             dict: a bridge object
         """
         raise NotImplementedError()
 
-    async def compliance(self, session, remediation, report, args):
+    @abstractmethod
+    async def compliance(self, session: Session, remediation: bool, report: bool) -> dict | None:
         """Check if all repositories are compliants
 
         No remediation should be done by default if a repository is not compliant.
@@ -308,14 +356,14 @@ class Sccs(object):
             session(object): the session
             remediation(bool): force a remediation
             report(bool): send a report (avoid to call compliance_report)
-            args(dict): extr arguments to handle the operation
 
         Returns:
             dict|None: an optional report
         """
         raise NotImplementedError()
 
-    async def compliance_report(self, session, args):
+    @abstractmethod
+    async def compliance_report(self, session) -> dict:
         """Provides a compliance report about all repositories
 
         Returns:
@@ -323,7 +371,8 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
-    async def compliance_repository(self, session, repository, remediation, report, args):
+    @abstractmethod
+    async def compliance_repository(self, session, repository, remediation, report) -> dict | None:
         """Check if a repository is compliant
 
         No remediation should be done by default if a repository is not compliant.
@@ -337,14 +386,14 @@ class Sccs(object):
             repository(str): the repository name
             remediation(bool): force a remediation
             report(bool): send a report (avoid to call compliance_report_repository)
-            args(dict): extr arguments to handle the operation
 
         Returns:
             dict|None: an optional report
         """
         raise NotImplementedError()
 
-    async def compliance_report_repository(self, session, repository, args):
+    @abstractmethod
+    async def compliance_report_repository(self, session, repo_slug: str) -> dict:
         """Provides a compliance report for the repository
 
         Returns:
@@ -352,22 +401,30 @@ class Sccs(object):
         """
         raise NotImplementedError()
 
-    async def get_hooks_repository(self,session,repository,args):
-        """Check if a repository is compliant
+    @abstractmethod
+    async def get_projects(self, session):
+        raise NotImplementedError()
 
-        No remediation should be done by default if a repository is not compliant.
-        A remediation can failed if manual intervention is required.
-        An optional report can be send back to the requester
+    @abstractmethod
+    async def get_webhook_subscriptions(self, session, repo_slug: str):
+        raise NotImplementedError()
 
-        The report should be cached/stored to be provided in an efficient way with compliance_report_repository
+    @abstractmethod
+    async def create_webhook_subscription_for_repo(
+            self,
+            session: Session,
+            repo_slug: str,
+            url: str,
+            active: bool,
+            events: list[WebhookEvent],
+            description: str,
+            ):
+        raise NotImplementedError()
 
-        Args:
-            session(object): the session
-            repository(str): the repository name
-            remediation(bool): force a remediation
-            report(bool): send a report (avoid to call compliance_report_repository)
-            args(dict): extr arguments to handle the operation
+    @abstractmethod
+    async def delete_webhook_subscription(self, session, repo_slug, subscription_id):
+        raise NotImplementedError()
 
-        Returns:
-            dict|None: an optional report
-        """
+    @abstractmethod
+    async def get_repository_permission(self, session, repo_slug) -> str | None:
+        raise NotImplementedError()

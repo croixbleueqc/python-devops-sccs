@@ -1,136 +1,105 @@
-"""
-Scheduler module
-
-Managing Watchers, subscription, unsubscribtion...
-"""
-
 # Copyright 2021 Croix Bleue du Québec
+import logging
+from typing import Any, Callable
+
+from anyio import (
+    create_memory_object_stream,
+    create_task_group,
+    Event, Lock, TASK_STATUS_IGNORED, get_cancelled_exc_class,
+    )
+from anyio.abc import TaskStatus
+from anyio.streams.memory import MemoryObjectSendStream
+
+from .watcher import Watcher
+
 
 # This file is part of python-devops-sccs.
-
 # python-devops-sccs is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
-
 # python-devops-sccs is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU Lesser General Public License for more details.
-
 # You should have received a copy of the GNU Lesser General Public License
 # along with python-devops-sccs.  If not, see <https://www.gnu.org/licenses/>.
 
-import asyncio
-import logging
-from .watcher import Watcher
-from .hookclient import HookClient
 
 class Scheduler(object):
+    """
+    Wrap API values in a WatcherType object.
+    Exists solely to support the legacy API.
+    """
+
     def __init__(self):
-        self.tasks={}
-        self.lock_tasks = asyncio.Lock()
+        self.watchers = {}
+        self.lock = Lock()
 
-    async def watch(self, identity: tuple, poll_interval: int, func, filtering=lambda event: True, **kwargs):
-        """
-        Run a new task or connect to an existing task
-        """
+    async def watch(
+            self,
+            identity: tuple,
+            poll_interval: int,
+            send_stream: MemoryObjectSendStream,
+            cancel_event: Event(),
+            func,
+            args: tuple = (),
+            kwargs: dict = None,
+            event_filter: Callable[[Any], bool] = lambda _: True,
+            ):
+        if kwargs is None:
+            kwargs = {}
+
         wid = hash(identity)
-        logging.debug(f"wid: {wid}")
 
-        # Protect task creation
-        async with self.lock_tasks:
-            w = self.tasks.get(wid)
+        async with self.lock:
+            w = self.watchers.get(wid)
             if w is None:
-                logging.debug(f"scheduler: creating a new watcher for {wid}")
-                w = Watcher(wid, poll_interval, func, **kwargs)
-                self.tasks[wid] = w
+                w = Watcher(wid, poll_interval, func, args, kwargs)
+                self.watchers[wid] = w
 
-        try:
-            # Create client, connect to the watcher and read events
+        async def process_watcher_events(
+                receive_stream,
+                task_status: TaskStatus = TASK_STATUS_IGNORED
+                ):
+            task_status.started()
+            async with receive_stream:
+                async for event in receive_stream:
+                    if isinstance(event, Watcher.CloseClientOnException):
+                        raise event.get_exception()
+                    if event_filter(event):
+                        await send_stream.send(event)
 
-            client = asyncio.Queue()
-
-            await w.subscribe(client)
-
-            while True:
-                event = await client.get()
-                client.task_done()
-
-                if isinstance(event, Watcher.CloseClientOnException):
-                    raise event.get_exception()
-
-                if filtering(event):
-                    yield event
-        except asyncio.CancelledError:
-            logging.debug("cancelled")
-        finally:
-            # disconnect from the watcher
+        async with create_task_group() as tg:
             try:
-                await w.unsubscribe(client)
-            except asyncio.CancelledError:
-                pass
+                w_send_stream, w_receive_stream = create_memory_object_stream()
+                await tg.start(process_watcher_events, w_receive_stream)
+                tg.start_soon(w.subscribe, w_send_stream)
+                await cancel_event.wait()
+                await w.unsubscribe(w_send_stream)
+            except Exception:
+                await w.unsubscribe(w_send_stream)
+                raise
+            except get_cancelled_exc_class():
+                await w.stop()
+                raise
+            finally:
+                if not w.has_subscribers():
+                    async with self.lock:
+                        del self.watchers[wid]
 
-            # Protect task update
-            async with self.lock_tasks:
-                if w.is_no_watcher():
-                    logging.debug(f"scheduler: remove watcher {wid}")
-                    self.tasks.pop(wid)
-    
-    async def hook(self, identity: tuple, filtering=lambda event: True, **kwargs):
-        """
-        Run a new task or connect to an existing task
-        """
-        wid = hash(identity)
-        logging.debug(f"wid: {wid}")
+        logging.debug("Watcher cancelled")
 
-        # Protect task creation
-        async with self.lock_tasks:
-            w = self.tasks.get(wid)
-            if w is None:
-                logging.debug(f"scheduler: creating a new hook for {wid}")
-                w = HookClient(wid, **kwargs)
-                self.tasks[wid] = w
+        # logger.remove(log)
 
-        try:
-            # Create client, connect to the watcher and read events
-
-            client = asyncio.Queue()
-
-            await w.subscribe(client)
-
-            while True:
-                event = await client.get()
-                client.task_done()
-
-                if isinstance(event, HookClient.CloseClientOnException):
-                    raise event.get_exception()
-
-                if filtering(event):
-                    yield event
-        except asyncio.CancelledError:
-            logging.debug("cancelled")
-        finally:
-            # disconnect from the watcher
-            try:
-                await w.unsubscribe(client)
-            except asyncio.CancelledError:
-                pass
-
-            # Protect task update
-            async with self.lock_tasks:
-                if w.is_no_hooked():
-                    logging.debug(f"scheduler: remove hook {wid}")
-                    self.tasks.pop(wid)
-
-    def notify(self, identity: tuple):
+    async def notify(self, identity: tuple):
         """
         Notify watcher to update is content due to an outside event
         """
         wid = hash(identity)
-
-        w = self.tasks.get(wid)
-
-        if w is not None:
-            logging.debug(f"notify {wid}")
-            w.refresh()
+        async with self.lock:
+            try:
+                w = self.watchers[wid]
+                w.refresh(True)
+            except KeyError:
+                pass
